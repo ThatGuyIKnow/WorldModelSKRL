@@ -20,6 +20,7 @@ from Losses.GMMLoss import gaussian_mixture_loss
 # [start-config-dict-torch]
 WorldModelDQNDefaultConfig = {
     'learning_starts': 1e6,
+    'batch_size': 32,
     'vae': {
         'learning_starts': 1000,
         'learning_stops': 1e6,
@@ -44,7 +45,6 @@ WorldModelDQNDefaultConfig.update(DQN_DEFAULT_CONFIG)
 # [end-config-dict-torch]
 
 class WorldModelDQN(DQN):
-    
     def __init__(self,
                  models: Dict[str, Model],
                  memory: Optional[Union[Memory, Tuple[Memory]]] = None,
@@ -176,8 +176,9 @@ class WorldModelDQN(DQN):
         # compute target values
         recon_x, mu, logsigma, z = vae(sampled_states)
 
-        reconstruction_loss = F.mse_loss(recon_x.view(recon_x.size(0), -1), sampled_states)
-        reg_loss = 0.5 * (mu ** 2 + torch.exp(logsigma) - logsigma - 1).sum(dim=1).mean()
+        reconstruction_loss = F.mse_loss(recon_x.view(recon_x.size(0), -1), sampled_states, reduction='sum')
+        #reg_loss = 0.5 * (mu ** 2 + torch.exp(logsigma) - logsigma - 1).sum(dim=1).mean()
+        reg_loss = -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
         loss = reconstruction_loss + reg_loss
         
         # optimize Q-network

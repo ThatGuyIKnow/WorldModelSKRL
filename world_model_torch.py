@@ -17,34 +17,7 @@ from Agents.WorldModelDQN import WorldModelDQN
 
 
 # seed for reproducibility
-set_seed()  # e.g. `set_seed(42)` for fixed seed
-
-
-# define model (deterministic model) using mixin
-class QNetwork(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False):
-        Model.__init__(self, observation_space, action_space, device)
-        DeterministicMixin.__init__(self, clip_actions)
-        self.features_extractor = nn.Sequential(
-                nn.Conv2d(1, 32, 8, stride=4),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, 4, stride=2),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, 3, stride=1),
-                nn.ReLU(),
-                nn.Flatten(),
-        )
-        self.net = nn.Sequential(
-                nn.Linear(3136, 512),
-                nn.ReLU(),
-                nn.Linear(512, self.num_actions)
-            )
-
-    def compute(self, inputs, role):
-        # permute (samples, width * height * channels) -> (batch, channels, width, height)
-        x = self.features_extractor(inputs["states"].view(-1, 1, *self.observation_space.shape))
-        return self.net(x), {}
-
+set_seed(123)  # e.g. `set_seed(42)` for fixed seed
 
 # load and wrap the environment
 env_name = 'ALE/Breakout-v5'
