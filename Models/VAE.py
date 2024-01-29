@@ -1,82 +1,78 @@
 
-from math import sqrt
+"""
+Variational encoder model, used as a visual model
+for our model of the world.
+"""
 import torch
 import torch.nn as nn
-from Models.utils.LambdaLayer import LambdaLayer
+import torch.nn.functional as F
 
-# import the skrl components to build the RL system
-from skrl.models.torch import DeterministicMixin, Model
+class Decoder(nn.Module):
+    """ VAE decoder """
+    def __init__(self, img_channels, latent_size):
+        super(Decoder, self).__init__()
+        self.latent_size = latent_size
+        self.img_channels = img_channels
 
+        self.fc1 = nn.Linear(latent_size, 1024)
+        self.deconv1 = nn.ConvTranspose2d(1024, 128, 5, stride=2)
+        self.deconv2 = nn.ConvTranspose2d(128, 64, 5, stride=2)
+        self.deconv3 = nn.ConvTranspose2d(64, 32, 6, stride=2)
+        self.deconv4 = nn.ConvTranspose2d(32, img_channels, 6, stride=2)
 
-class Encoder(Model):
-    def __init__(self, observation_space, img_channels, latent_space, device):
-        Model.__init__(self, observation_space, latent_space, device)
-        
-        self.latent_space = latent_space
-        
-        self.encoder = nn.Sequential(
-                nn.Conv2d(img_channels, 32, 8, stride=4),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, 4, stride=2),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, 3, stride=1),
-                nn.ReLU(),
-                nn.Flatten(),
-        )
-        self.logsigma = nn.Sequential(
-                nn.Linear(3136, self.latent_space),
-                nn.ReLU(),
-            )
-        self.mu = nn.Sequential(
-                nn.Linear(3136, self.latent_space),
-                nn.ReLU(),
-            )
+    def forward(self, x): # pylint: disable=arguments-differ
+        x = F.relu(self.fc1(x))
+        x = x.unsqueeze(-1).unsqueeze(-1)
+        x = F.relu(self.deconv1(x))
+        x = F.relu(self.deconv2(x))
+        x = F.relu(self.deconv3(x))
+        reconstruction = F.sigmoid(self.deconv4(x))
+        return reconstruction
 
-    def act(self, inputs, role):
-        # permute (samples, width * height * channels) -> (batch, channels, width, height)
-        x = self.encoder(inputs["states"].view(-1, 1, *self.observation_space.shape))
-        mu = self.mu(x)
-        
-        logsig = self.logsigma(x)
-        sig = logsig.exp()
-        
-        rand = torch.randn_like(sig)
-        
-        z = rand * sig + mu
-        
-        return mu, sig, z
+class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
+    """ VAE encoder """
+    def __init__(self, img_channels, latent_size):
+        super(Encoder, self).__init__()
+        self.latent_size = latent_size
+        #self.img_size = img_size
+        self.img_channels = img_channels
 
-class Decoder(Model):
-    def __init__(self, latent_space, img_channels, device):
-        Model.__init__(self, latent_space, img_channels, device)
-        
-        new_dim = int(sqrt(3136/64))
-        self.deconv = nn.Sequential(
-                nn.Linear(latent_space, 3136),
-                nn.ReLU(),
-                LambdaLayer(lambda x: x.view(-1, 64, new_dim, new_dim)),
-                nn.ConvTranspose2d(64, 64, 8, stride=4),
-                nn.ReLU(),
-                nn.ConvTranspose2d(64, 32, 4, stride=2),
-                nn.ReLU(),
-                nn.ConvTranspose2d(32, img_channels, 3, stride=1),
-                nn.Sigmoid()
-        )
+        self.conv1 = nn.Conv2d(img_channels, 32, 4, stride=2)
+        self.conv2 = nn.Conv2d(32, 64, 4, stride=2)
+        self.conv3 = nn.Conv2d(64, 128, 4, stride=2)
+        self.conv4 = nn.Conv2d(128, 256, 4, stride=2)
 
-    def act(self, inputs, role):
-        return self.deconv(inputs)
+        self.fc_mu = nn.Linear(2*2*256, latent_size)
+        self.fc_logsigma = nn.Linear(2*2*256, latent_size)
 
 
-class VAE(Model):
-    def __init__(self, observation_space, latent_space, img_channels, device):
-        Model.__init__(self, latent_space, img_channels, device)
-        
-        self.encoder = Encoder(observation_space, img_channels, latent_space, device)
-        self.decoder = Decoder(latent_space, img_channels, device)
+    def forward(self, x): # pylint: disable=arguments-differ
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = x.view(x.size(0), -1)
 
-    def act(self, inputs, role):
-        mu, sig, z = self.encoder(inputs)
-        
-        y = self.decoder(z)
-        
-        return mu, sig, z, y
+        mu = self.fc_mu(x)
+        logsigma = self.fc_logsigma(x)
+
+        return mu, logsigma
+
+class VAE(nn.Module):
+    """ Variational Autoencoder """
+    def __init__(self, img_channels, latent_size, observation_space):
+        super(VAE, self).__init__()
+        self.observation_space = observation_space
+        self.img_channels = img_channels
+        self.encoder = Encoder(img_channels, latent_size)
+        self.decoder = Decoder(img_channels, latent_size)
+
+    def forward(self, x): # pylint: disable=arguments-differ
+        x = x.view(-1, self.img_channels, *self.observation_space)
+        mu, logsigma = self.encoder(x)
+        sigma = logsigma.exp()
+        eps = torch.randn_like(sigma)
+        z = eps.mul(sigma).add_(mu)
+
+        recon_x = self.decoder(z)
+        return recon_x, mu, logsigma, z

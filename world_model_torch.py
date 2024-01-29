@@ -49,8 +49,8 @@ class QNetwork(DeterministicMixin, Model):
 # load and wrap the environment
 env_name = 'ALE/Breakout-v5'
 env = gym.make(env_name, render_mode='rgb_array')
-env = gym.wrappers.AtariPreprocessing(env, frame_skip=1)
-env = gym.wrappers.RecordVideo(env, f'videos/{env_name}_{time.time()}/', episode_trigger=lambda x: x % 50 == 0, video_length=500)
+env = gym.wrappers.AtariPreprocessing(env, frame_skip=1, screen_size=64)
+#env = gym.wrappers.RecordVideo(env, f'videos/{env_name}_{time.time()}/', episode_trigger=lambda x: x % 50 == 0, video_length=500)
 env = wrap_env(env)
 
 device = env.device
@@ -73,7 +73,7 @@ for model in models.values():
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/dqn.html#configuration-and-hyperparameters
 cfg = DQN_DEFAULT_CONFIG.copy()
-cfg["learning_starts"] = 1000
+cfg["learning_starts"] = 1e6
 cfg["update_interval"] = 4
 cfg["target_update_interval"] = 4
 cfg["polyak"] = 0.05

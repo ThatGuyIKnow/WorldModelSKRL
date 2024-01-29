@@ -17,7 +17,7 @@ WORLD_MODEL_DEFAULT_CONFIG = {
     "gaussian_space": 64,    # size of the saved h when predicting the future
     "lookahead": 1,          # the amount of lookahead when predicting the future
     "temperature": 0.2,      # the MDN-RNN temparure for the mixture density network
-    "device": 'cuda',        # allocated device
+    "device": 'cpu',        # allocated device
     "img_channels": 1        # img_channels (rgb: 3 or greyscale: 1)
 }
 # [end-config-dict-torch]
@@ -46,6 +46,6 @@ class WorldModelController(DeterministicMixin, Model):
     def compute(self, inputs, role):
         z, h = self.world_model(inputs)
         x = torch.concat([z, h], dim=-1)
-        return self.net(x)
+        return self.net(x), {}
         
 

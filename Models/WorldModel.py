@@ -26,12 +26,17 @@ class WorldModel(Model):
         
         self.lookahead = lookahead
         
-        self.vae = VAE(observation_space, latent_space, img_channels, device)
+        self.vae = VAE(img_channels, latent_space, observation_space.shape)
         self.mdnrnn = MDNRNN(latent_space, action_space, h_space, gaussian_space, lookahead, temperature, device)
 
 
     def act(self, inputs, role):
-        z = self.vae(inputs)
-        inputs['latent'] = z
-        _, _, _, _, (h, _)= self.mdnrnn(inputs)
-        return z,  h
+        recon_x, mu, logsigma, z = self.vae(inputs['states'])
+        inputs['vae'] = {
+            'recon_x' : recon_x,
+            'mu' : mu,
+            'logsigma' : logsigma,
+            'latent' : z
+        }
+        mus, sigmas, logpis, rs, ds, (hidden_state, _) = self.mdnrnn(inputs)
+        return z,  hidden_state
