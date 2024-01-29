@@ -13,6 +13,7 @@ from torch import optim
 from torch.nn import functional as F
 from Utils.EarlyStopping import EarlyStopping
 from Utils.ReduceLROnPlateau import ReduceLROnPlateau
+from Utils.ModelCheckpoint import ModelCheckpoint
 
 from Losses.GMMLoss import gaussian_mixture_loss
 
@@ -27,7 +28,8 @@ WorldModelDQNDefaultConfig = {
         'learning_rate_eps': 0.01,
         'optimizer': optim.Adam,
         'lr_schedule': ReduceLROnPlateau,
-        'track_recon_interval': 200
+        'track_recon_interval': 200,
+        'checkpoint_interval': 1000
         },
     'mdnrnn': {
         'learning_starts': 1e6,
@@ -66,6 +68,7 @@ class WorldModelDQN(DQN):
         self._vae_learning_rate_eps = self._cfg['vae']['learning_rate_eps']
         self._vae_lr_schedule = self._cfg['vae']['lr_schedule']
         self._vae_track_recon_interval = self._cfg['vae']['track_recon_interval']
+        self._vae_checkpoint_interval = self._cfg['vae']['checkpoint_interval']
 
         self._mdnrnn_learning_starts = self._cfg['mdnrnn']['learning_starts']
         self._mdnrnn_learning_stops = self._cfg['mdnrnn']['learning_stops']
@@ -83,7 +86,7 @@ class WorldModelDQN(DQN):
         self._vae_optimizer = self._cfg['vae']['optimizer'](self.network.world_model.vae.parameters())
         self._vae_lr_scheduler = self._cfg['vae']['lr_schedule'](self._vae_optimizer, mode='min', factor=0.5, patience=5)
         self._vae_stopping_criteria = EarlyStopping('min', patience=30)
-
+        self._vae_checkpoint  = ModelCheckpoint(self.network.world_model.vae, self._vae_checkpoint_interval, self.experiment_dir, 'VAE')
         self._tracking_video = collections.defaultdict(None)
 
     def act(self, states: torch.Tensor, timestep: int, timesteps: int) -> torch.Tensor:
@@ -202,6 +205,8 @@ class WorldModelDQN(DQN):
             data = torch.stack([next_states[0], recon_x[0]])
             self.track_media('VAE / Reconstruction', data, type='images')
         
+        self._vae_checkpoint.save_checkpoint(timestep, loss)
+
         return False
                 
     def _update_mdnrnn(self) -> None:
