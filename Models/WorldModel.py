@@ -32,11 +32,6 @@ class WorldModel(Model):
 
     def act(self, inputs, role):
         recon_x, mu, logsigma, z = self.vae(inputs['states'])
-        inputs['vae'] = {
-            'recon_x' : recon_x,
-            'mu' : mu,
-            'logsigma' : logsigma,
-            'latent' : z
-        }
+        inputs['latent'] = z
         mus, sigmas, logpis, rs, ds, (hidden_state, _) = self.mdnrnn(inputs)
         return z,  hidden_state

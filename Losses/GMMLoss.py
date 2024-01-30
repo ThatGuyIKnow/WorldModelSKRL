@@ -3,6 +3,15 @@ from torch.distributions.normal import Normal as Gaussian
 
 def gaussian_mixture_loss(batch, mus, sigmas, logpi):
     batch = batch.unsqueeze(-2)
+
+    if isinstance(mus, list) or isinstance(mus, tuple):
+        mus = torch.stack(mus)    
+    if isinstance(sigmas, list) or isinstance(sigmas, tuple):
+        sigmas = torch.stack(sigmas)
+    if isinstance(logpi, list) or isinstance(logpi, tuple):
+        logpi = torch.stack(logpi)    
+ 
+    
     # Inititiate the Gaussian Dists
     normal_dist = Gaussian(mus, sigmas)
     # Get the Log(P(x_i,k)~N_{mus, sigma}) => (batch, gaussian, feature)
@@ -29,5 +38,5 @@ def gaussian_mixture_loss(batch, mus, sigmas, logpi):
     log_prob = max_log_probs.squeeze() + torch.log(probs)
     
     
-    return -log_prob
+    return -1 * torch.mean(log_prob)
     

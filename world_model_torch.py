@@ -31,12 +31,38 @@ device = env.device
 # instantiate a memory as experience replay
 memory = RandomMemory(memory_size=15000, num_envs=env.num_envs, device=device, replacement=False)
 
+class QNetwork(DeterministicMixin, Model):
+    def __init__(self, observation_space, action_space, device, clip_actions=False):
+        Model.__init__(self, observation_space, action_space, device)
+        DeterministicMixin.__init__(self, clip_actions)
+        self.features_extractor = nn.Sequential(
+                nn.Conv2d(1, 32, 8, stride=4),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(64, 64, 3, stride=1),
+                nn.ReLU(),
+                nn.Flatten(),
+        )
+        self.net = nn.Sequential(
+                nn.Linear(1024, 512),
+                nn.ReLU(),
+                nn.Linear(512, self.num_actions)
+            )
+
+    def compute(self, inputs, role):
+        # permute (samples, width * height * channels) -> (batch, channels, width, height)
+        x = self.features_extractor(inputs["states"].view(-1, 1, *self.observation_space.shape))
+        return self.net(x), {}
 
 # instantiate the agent's models (function approximators).
 # DQN requires 2 models, visit its documentation for more details
 # https://skrl.readthedocs.io/en/latest/api/agents/dqn.html#models
 models = {}
 models["world_model_controller"] = WorldModelController(env.observation_space, env.action_space, device)
+models["q_network"] = QNetwork(env.observation_space, env.action_space, device)
+models["target_q_network"] = QNetwork(env.observation_space, env.action_space, device)
+
 
 # initialize models' parameters (weights and biases)
 for model in models.values():
@@ -46,7 +72,7 @@ for model in models.values():
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/dqn.html#configuration-and-hyperparameters
 cfg = DQN_DEFAULT_CONFIG.copy()
-cfg["learning_starts"] = 1e6
+cfg["learning_starts"] = 1200
 cfg["update_interval"] = 4
 cfg["target_update_interval"] = 4
 cfg["polyak"] = 0.05

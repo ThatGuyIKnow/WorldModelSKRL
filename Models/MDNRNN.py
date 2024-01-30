@@ -123,13 +123,13 @@ class MDNRNN(Model):
             hidden_state = self.initial_state()
 
         state = []
-        for action, latent in zip(inputs['actions'], inputs['vae']['latent']):
+        for action, latent in zip(inputs['actions'], inputs['latent']):
             
             action = torch.unsqueeze(action, dim=0)
             latent = torch.unsqueeze(latent, dim=0)
 
             mu, sigma, logpi, r, d, hidden_state = self.cell(action, latent, hidden_state)
             state.append([mu, sigma, logpi, r, d])
-        mus, sigmas, logpis, rs, ds = list(zip(*state))
-        
+        states = list(zip(*state))
+        mus, sigmas, logpis, rs, ds = [torch.stack(v) for v in states] 
         return mus, sigmas, logpis, rs, ds, hidden_state

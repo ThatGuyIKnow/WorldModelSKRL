@@ -44,7 +44,7 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
         self.fc_mu = nn.Linear(2*2*256, latent_size)
         self.fc_logsigma = nn.Linear(2*2*256, latent_size)
-
+    
 
     def forward(self, x): # pylint: disable=arguments-differ
         x = F.relu(self.conv1(x))
@@ -56,7 +56,16 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         mu = self.fc_mu(x)
         logsigma = self.fc_logsigma(x)
 
-        return mu, logsigma
+        z = self.sample_z(mu, logsigma)
+
+        return mu, logsigma, z
+    
+    def sample_z(self, mu, logsigma):
+        sigma = logsigma.exp()
+        eps = torch.randn_like(sigma)
+        return eps.mul(sigma).add_(mu)
+
+
 
 class VAE(nn.Module):
     """ Variational Autoencoder """
@@ -68,11 +77,9 @@ class VAE(nn.Module):
         self.decoder = Decoder(img_channels, latent_size)
 
     def forward(self, x): # pylint: disable=arguments-differ
-        x = x.view(-1, self.img_channels, *self.observation_space)
-        mu, logsigma = self.encoder(x)
-        sigma = logsigma.exp()
-        eps = torch.randn_like(sigma)
-        z = eps.mul(sigma).add_(mu)
+        #x = x.view(-2, self.img_channels, *self.observation_space)
+        mu, logsigma, z = self.encoder(x)
 
         recon_x = self.decoder(z)
         return recon_x, mu, logsigma, z
+    
