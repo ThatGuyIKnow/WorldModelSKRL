@@ -6,6 +6,8 @@ for our model of the world.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim import Adam, lr_scheduler
+import lightning as L
 
 class Decoder(nn.Module):
     """ VAE decoder """
@@ -47,6 +49,8 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
     
 
     def forward(self, x): # pylint: disable=arguments-differ
+        if len(x.shape) == 3:
+            x = x.view(1, *x.shape)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
@@ -66,12 +70,12 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         return eps.mul(sigma).add_(mu)
 
 
-
-class VAE(nn.Module):
+class VAE(L.LightningModule):
     """ Variational Autoencoder """
-    def __init__(self, img_channels, latent_size, observation_space):
+    def __init__(self, img_channels, latent_size):
         super(VAE, self).__init__()
-        self.observation_space = observation_space
+        self.save_hyperparameters()
+
         self.img_channels = img_channels
         self.encoder = Encoder(img_channels, latent_size)
         self.decoder = Decoder(img_channels, latent_size)
@@ -82,4 +86,68 @@ class VAE(nn.Module):
 
         recon_x = self.decoder(z)
         return recon_x, mu, logsigma, z
+
     
+    def configure_optimizers(self):
+        optimizer = Adam(self.parameters())
+        # Using a scheduler is optional but can be helpful.
+        # The scheduler reduces the LR if the validation performance hasn't improved for the last N epochs
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+
+    def _get_reconstruction_loss(self, batch, recon_x):
+        return F.mse_loss(recon_x, batch, reduction='sum')
+    
+    def _get_regularization_loss(self, logsigma, mu):
+        return -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
+
+    def training_step(self, batch, batch_idx):
+        recon_x, mu, logsigma, _ = self.forward(batch)
+        
+        recon_loss = self._get_reconstruction_loss(batch, recon_x)
+        reg_loss = self._get_regularization_loss(logsigma, mu)
+        loss = recon_loss + reg_loss
+        
+        self.log("train_loss", loss)
+        
+        return loss
+
+
+    def validation_step(self, batch, batch_idx):
+        recon_x, mu, logsigma, _ = self.forward(batch)
+        
+        recon_loss = self._get_reconstruction_loss(batch, recon_x)
+        reg_loss = self._get_regularization_loss(logsigma, mu)
+        loss = recon_loss + reg_loss
+
+        self.log("val_loss", loss)
+
+
+    def test_step(self, batch, batch_idx):
+        recon_x, mu, logsigma, _ = self.forward(batch)
+        
+        recon_loss = self._get_reconstruction_loss(batch, recon_x)
+        reg_loss = self._get_regularization_loss(logsigma, mu)
+        loss = recon_loss + reg_loss
+
+        self.log("test_loss", loss)
+        return loss
+    
+    def get_as_transform(self):
+        return VAE.VAETransform(self.encoder)
+    
+    class VAETransform(object):
+        """Rescale the image in a sample to a given size.
+
+        Args:
+            output_size (tuple or int): Desired output size. If tuple, output is
+                matched to output_size. If int, smaller of image edges is matched
+                to output_size keeping aspect ratio the same.
+        """
+        def __init__(self, encoder) -> None:
+            self.encoder = encoder
+
+        def __call__(self, sample):
+            _, _, z = self.encoder(sample)
+                
+            return z.view(-1).clone().detach()

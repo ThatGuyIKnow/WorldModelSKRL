@@ -22,12 +22,23 @@ from Losses.GMMLoss import gaussian_mixture_loss
 def preprocess(shape):
     return lambda x, train=False: x.view(-1, *shape) / 255
 
-def to_latent(encoder, mdnrnn, shape):
+def to_latent(encoder, mdnrnn, shape, batch_size):
     state_preprocessor = preprocess(shape)
-    def func(x):
+    def func(x, hidden_state = None):
         x = state_preprocessor(x)
+
         _, _, z = encoder(x)
-        _, _, _, _, _, h = mdnrnn.act(z, role='preprocessor')
+        if hidden_state is None:
+            hidden_state = mdnrnn.initial_state(batch_size)
+
+        for action, latent in zip(inputs['actions'], inputs['latent']):
+          
+            action = torch.unsqueeze(action, dim=0)
+            latent = torch.unsqueeze(latent, dim=0)
+
+            mu, sigma, logpi, r, d, hidden_state = self.cell(action, latent, hidden_state)
+        _, _, z = encoder(x)
+        _, _, _, _, _, h = mdnrnn.cell(z, h)
         return torch.concat([z, h], dim=1)
     return func
  

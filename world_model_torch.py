@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 # import the skrl components to build the RL system
-from skrl.agents.torch.dqn import DQN, DQN_DEFAULT_CONFIG
+from skrl.agents.torch.dqn import A2C, A2C_DEFAULT_CONFIG
 from skrl.envs.wrappers.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.models.torch import DeterministicMixin, Model
@@ -59,7 +59,7 @@ class QNetwork(DeterministicMixin, Model):
 # DQN requires 2 models, visit its documentation for more details
 # https://skrl.readthedocs.io/en/latest/api/agents/dqn.html#models
 models = {}
-models["world_model_controller"] = WorldModelController(env.observation_space, env.action_space, device)
+
 models["q_network"] = QNetwork(env.observation_space, env.action_space, device)
 models["target_q_network"] = QNetwork(env.observation_space, env.action_space, device)
 
@@ -71,7 +71,7 @@ for model in models.values():
 
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/dqn.html#configuration-and-hyperparameters
-cfg = DQN_DEFAULT_CONFIG.copy()
+cfg = A2C_DEFAULT_CONFIG.copy()
 cfg["learning_starts"] = 1200
 cfg["update_interval"] = 4
 cfg["target_update_interval"] = 4
@@ -85,7 +85,7 @@ cfg["experiment"]["write_interval"] = 1000
 cfg["experiment"]["checkpoint_interval"] = 5000
 cfg["experiment"]["directory"] = f"runs/torch/{env_name}"
 
-agent = WorldModelDQN(models=models,
+agent = A2C(models=models,
             memory=memory,
             cfg=cfg,
             observation_space=env.observation_space,

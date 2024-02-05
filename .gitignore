@@ -3,3 +3,4 @@
 .vscode/launch.json
 **/__pycache__/
 runs/
+data/
