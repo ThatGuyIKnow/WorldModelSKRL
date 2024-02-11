@@ -8,7 +8,7 @@ from torch.optim import RMSprop
 from torch.distributions import (Normal as Gaussian, Categorical, MixtureSameFamily, Independent)
 
 import lightning as L
-from Losses.GMMLoss import bce_with_logits_list, gaussian_mixture_loss, mse_loss_list
+from Losses.Losses import bce_with_logits_list, gaussian_mixture_loss, mse_loss_list
 
 from Utils.ReduceLROnPlateau import ReduceLROnPlateau
 

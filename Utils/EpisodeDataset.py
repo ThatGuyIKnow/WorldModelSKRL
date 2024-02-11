@@ -4,6 +4,8 @@ import pandas as pd
 from PIL import Image
 import torch.nn.functional as F
 import torch.nn as nn
+from torch.utils import data
+from torchvision import transforms
 
 class EpisodeDataset(Dataset):
     def __init__(self, csv_file, transform=None, encoding = None):
@@ -54,7 +56,6 @@ class EpisodeDataset(Dataset):
         actions.requires_grad = True
         rewards.requires_grad = True
         dones.requires_grad = True
-        
 
         sample = {'images': images, 
                   'actions': actions, 
@@ -84,3 +85,23 @@ class EpisodeDataset(Dataset):
         batch = {key : [sample[key] for sample in batch] for key in keys}
         coll_batch = {key : EpisodeDataset.collate_key(batch[key], seq_lengths, order_indicies) for key in keys}
         return coll_batch
+        
+def get_car_racing_dataset(dataset_path, batch_size, encoding_model=None):
+    # Loading the training dataset. We need to split it into a training and validation part
+    train_dataset = EpisodeDataset(dataset_path, transform=car_preprocessing_transform, encoding=encoding_model)    
+    train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
+
+    # We define a set of data loaders that we can use for various purposes later.
+    train_loader = data.DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
+    val_loader = data.DataLoader(val_set, batch_size=batch_size, shuffle=False, drop_last=False, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
+
+    return train_loader, val_loader
+
+
+# Transformations applied on each image => only make them a tensor
+car_preprocessing_transform = transforms.Compose([
+    transforms.Grayscale(), 
+    transforms.ToTensor(), 
+    transforms.Normalize((0.5,), (0.5,)), 
+    transforms.Resize((64, 64), antialias=True),
+])

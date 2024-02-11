@@ -112,7 +112,6 @@ class VAE(L.LightningModule):
         
         return loss
 
-
     def validation_step(self, batch, batch_idx):
         recon_x, mu, logsigma, _ = self.forward(batch)
         
@@ -121,6 +120,7 @@ class VAE(L.LightningModule):
         loss = recon_loss + reg_loss
 
         self.log("val_loss", loss)
+        return loss
 
 
     def test_step(self, batch, batch_idx):

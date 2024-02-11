@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import lightning as L
@@ -11,6 +12,11 @@ from torchvision import transforms
 from Models.VAE import VAE
 from Utils.DataOnlyLoader import DataOnlyLoader
 
+from pytorch_lightning.loggers import WandbLogger
+
+from Utils.EpisodeDataset import get_car_racing_dataset
+
+BATCH_SIZE = 256
 
 # Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
 DATASET_PATH = 'data'
@@ -45,42 +51,32 @@ class GenerateCallback(Callback):
                 pl_module.train()
             # Plot and add to tensorboard
             imgs = torch.stack([input_imgs, reconst_imgs], dim=1).flatten(0, 1)
-            grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True)
-            trainer.logger.experiment.add_image("Reconstructions", grid, global_step=trainer.global_step)
+            grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True).cpu().numpy().swapaxes(2, 0)
+            trainer.logger.log_image("Reconstructions", images=[grid])
 
-
-def get_car_racing_dataset():
-    # Transformations applied on each image => only make them a tensor
-    transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,)), transforms.Resize((64, 64))])
-
-    # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = torchvision.datasets.ImageFolder(DATASET_PATH, transform=transform)    
-    train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
-
-    # We define a set of data loaders that we can use for various purposes later.
-    train_loader = data.DataLoader(train_set, batch_size=256, shuffle=True, drop_last=True, pin_memory=True, num_workers=4)
-    val_loader = data.DataLoader(val_set, batch_size=256, shuffle=False, drop_last=False, num_workers=4)
-
-    train_loader = DataOnlyLoader(train_loader)
-    val_loader = DataOnlyLoader(val_loader)
-    return train_dataset, train_loader, val_loader
 
 
 def train_vae(latent_dim=32):
-    train_dataset, train_loader, val_loader = get_car_racing_dataset()
+    train_dataset, train_loader, val_loader = get_car_racing_dataset(DATASET_PATH, BATCH_SIZE)
     # Create a PyTorch Lightning trainer with the generation callback
     training_images = torch.stack([train_dataset[i][0] for i in range(8)], dim=0)
+    # initialise the wandb logger and name your wandb project
+    wandb_logger = WandbLogger(project='world_model', name=f'vae_{latent_dim}_{datetime.datetime.today()}', log_model="all")
+
+    # add your batch size to the wandb config
+    wandb_logger.experiment.config["batch_size"] = BATCH_SIZE
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "vae_%i" % latent_dim),
         accelerator="auto",
         devices=1,
         max_epochs=500,
         callbacks=[
-            ModelCheckpoint(save_weights_only=True),
+            ModelCheckpoint(save_weights_only=True, every_n_epochs=2),
             GenerateCallback(training_images, every_n_epochs=10),
             LearningRateMonitor("epoch"),
-            EarlyStopping(monitor='val_loss', mode='min', patience=30)
+            EarlyStopping(monitor='train_loss', mode='min', patience=30)
         ],
+        logger=wandb_logger
     )
     trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need

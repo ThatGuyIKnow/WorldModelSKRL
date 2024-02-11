@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 import csv
 
-def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, max_eps_length=50, env_kwargs={}):
+def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, max_eps_length=50, frame_skip=1, env_kwargs={}):
     """
     Simulate a gym environment for a specified number of steps, save each frame as an image, 
     and record details (reward, done, action, image paths) in a CSV file.
@@ -32,6 +32,9 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
         observation = env.reset()
         eps_length = 0
         last_img_path = None
+
+        for _ in range(25):
+            observation = env.step(0)
         for step in range(total_steps):
             # Render the environment to a numpy array and save as an image
             frame = env.render()
@@ -39,8 +42,10 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
             Image.fromarray(frame).save(img_path)
 
             action = env.action_space.sample()  # Replace this with your action selection mechanism
-            observation, reward, done, truncated, info = env.step(action)
-        
+            for _ in range(frame_skip):
+                observation, reward, done, truncated, info = env.step(action)
+                if done or truncated: break
+
             truncated |= eps_length > max_eps_length
 
             # Prepare next image path for CSV (None if simulation ends)
@@ -62,4 +67,4 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
     env.close()
 
 # Example usage
-rollout_and_save_images_with_csv('CarRacing-v2', './data/carracing-v2', total_steps=1000, max_eps_length = 50, env_kwargs={'continuous': False})
+rollout_and_save_images_with_csv('CarRacing-v2', './data/carracing-v2', total_steps=1000, max_eps_length = 50, frame_skip=4, env_kwargs={'continuous': False})

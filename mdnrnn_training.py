@@ -1,27 +1,31 @@
+import datetime
 import os
 from random import randint
 
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.data as data
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 import torchvision
-from torchvision import transforms
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from Models.MDNRNN import MDNRNN
 from Models.VAE import VAE
 
-from Utils.EpisodeDataset import EpisodeDataset
+from Utils.EpisodeDataset import EpisodeDataset, get_car_racing_dataset, car_preprocessing_transform
+from Utils.ModelCheckpoint import retrieve_wandb_checkpoint
 
+from pytorch_lightning.loggers import WandbLogger
 
+# Batch size
+BATCH_SIZE = 4
 # Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
 DATASET_PATH = 'data/carracing-v2/details_simulation.csv'
 # Path to the folder where the pretrained models are saved
 CHECKPOINT_PATH = 'runs'
 # Path to the encoding/decoding VAE model
-ENC_PATH = 'runs/vae_32/lightning_logs/version_8/checkpoints/epoch=4-step=15.ckpt'
+ENC_PATH = retrieve_wandb_checkpoint(user='team-good-models', project='world_model', model_run='model-zuhrjnxl')
 
 # Setting the seed
 L.seed_everything(42)
@@ -36,17 +40,8 @@ print("Device:", device)
 
 encoding_model = VAE.load_from_checkpoint(ENC_PATH)
 
-# Transformations applied on each image => only make them a tensor
-transform = transforms.Compose([
-    transforms.Grayscale(), 
-    transforms.ToTensor(), 
-    transforms.Normalize((0.5,), (0.5,)), 
-    transforms.Resize((64, 64), antialias=True),
-    #ENCODING VAE MODEL
-    #encoding_model.get_as_transform()
-    ])
 
-class GenerateCallback(L.Callback):
+class GenerateImaginedCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
         super().__init__()
         self.action_shape = action_shape
@@ -90,25 +85,12 @@ class GenerateCallback(L.Callback):
                 pl_module.train()
             # Plot and add to tensorboard
             imgs = torch.stack([self.input_imgs[:, -1], self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
-            grid = torchvision.utils.make_grid(imgs, nrow=3, normalize=True)
-            trainer.logger.experiment.add_image("Reconstructions", grid, global_step=trainer.global_step)
+            grid = torchvision.utils.make_grid(imgs, nrow=3, normalize=True).cpu().numpy()
+            trainer.logger.log_image("Reconstructions", images=[np.moveaxis(grid, 0, -1)])
 
-def get_car_racing_dataset():
-
-
-
-    # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, encoding=encoding_model.encoder)    
-    train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
-
-    # We define a set of data loaders that we can use for various purposes later.
-    train_loader = data.DataLoader(train_set, batch_size=4, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
-    val_loader = data.DataLoader(val_set, batch_size=4, shuffle=False, drop_last=False, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
-
-    return train_loader, val_loader
 
 def get_seq_input_imgs(n=2, p=0.5):
-    dataset = EpisodeDataset(DATASET_PATH, transform=transform)
+    dataset = EpisodeDataset(DATASET_PATH, transform=car_preprocessing_transform)
     seqs = []
     for i in range(n):
         seq = dataset[i]
@@ -123,8 +105,13 @@ def get_seq_input_imgs(n=2, p=0.5):
     return seqs
 
 def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
-    train_loader, val_loader = get_car_racing_dataset()
+    train_loader, val_loader = get_car_racing_dataset(DATASET_PATH, BATCH_SIZE, encoding_model=encoding_model.encoder)
     input_seqs = get_seq_input_imgs()
+    # initialise the wandb logger and name your wandb project
+    wandb_logger = WandbLogger(project='world_model', name=f'mdnrnn_{latent_dim}_{datetime.datetime.today()}', log_model="all")
+
+    # add your batch size to the wandb config
+    wandb_logger.experiment.config["batch_size"] = BATCH_SIZE
     # Create a PyTorch Lightning trainer with the generation callback
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % latent_dim),
@@ -132,11 +119,12 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
         devices=1,
         max_epochs=500,
         callbacks=[
-            GenerateCallback(input_seqs, encoding_model, action_space, 1),
+            GenerateImaginedCallback(input_seqs, encoding_model, action_space, 10),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
             EarlyStopping(monitor='val_loss', mode='min', patience=30)
         ],
+        logger=wandb_logger
     )
     trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
