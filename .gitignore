@@ -1,6 +1,10 @@
 
 *.pyc
+*.cpython-311.pyc
 .vscode/launch.json
 **/__pycache__/
 runs/
 data/
+artifacts/
+videos/
+wandb/
