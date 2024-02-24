@@ -12,6 +12,8 @@ import torchvision
 from torchvision import transforms
 from Models.MDNRNN import MDNRNN
 from Models.VAE import VAE
+from lightning.pytorch.loggers import WandbLogger
+from pathlib import Path
 
 from Utils.EpisodeDataset import EpisodeDataset
 
@@ -34,7 +36,11 @@ torch.backends.cudnn.benchmark = False
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
 
-encoding_model = VAE.load_from_checkpoint(ENC_PATH)
+
+wandb_logger = WandbLogger(log_model="all")
+vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:v0"
+vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
+encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
 
 # Transformations applied on each image => only make them a tensor
 transform = transforms.Compose([
@@ -94,9 +100,6 @@ class GenerateCallback(L.Callback):
             trainer.logger.experiment.add_image("Reconstructions", grid, global_step=trainer.global_step)
 
 def get_car_racing_dataset():
-
-
-
     # Loading the training dataset. We need to split it into a training and validation part
     train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, encoding=encoding_model.encoder)    
     train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])

@@ -1,0 +1,11 @@
+gym==0.26.2
+gymnasium==0.29.1
+lightning==2.2.0.post0
+numpy==1.26.4
+pandas==2.2.0
+Pillow==10.2.0
+skrl==1.1.0
+torch==2.2.1
+torchvision==0.17.1
+tqdm==4.66.2
+wandb>=0.12.10

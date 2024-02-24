@@ -10,6 +10,7 @@ from torchvision import transforms
 
 from Models.VAE import VAE
 from Utils.DataOnlyLoader import DataOnlyLoader
+from Utils.TransformerWrapper import TransformWrapper
 
 
 # Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
@@ -51,7 +52,7 @@ class GenerateCallback(Callback):
 
 def get_car_racing_dataset():
     # Transformations applied on each image => only make them a tensor
-    transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,)), transforms.Resize((64, 64))])
+    transform = TransformWrapper.transform
 
     # Loading the training dataset. We need to split it into a training and validation part
     train_dataset = torchvision.datasets.ImageFolder(DATASET_PATH, transform=transform)    

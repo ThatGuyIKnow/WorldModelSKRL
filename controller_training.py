@@ -1,63 +1,84 @@
 # import the agent and its default configuration
-from skrl.agents.torch.dqn import DQN, DQN_DEFAULT_CONFIG
+from skrl.agents.torch.a2c import A2C, A2C_DEFAULT_CONFIG
 
-import torch
-import torch.nn as nn
+import numpy as np
+import gymnasium as gym
+from skrl.memories.torch import RandomMemory
+from lightning.pytorch.loggers import WandbLogger
+from pathlib import Path
+from Models.A2CModel import ActorMLP, CriticMLP
 
-from skrl.models.torch import Model, DeterministicMixin
-
-
-# define the model
-class MLP(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False):
-        Model.__init__(self, observation_space, action_space, device)
-        DeterministicMixin.__init__(self, clip_actions)
-
-        self.net = nn.Sequential(nn.Linear(self.num_observations + self.num_actions, 64),
-                                 nn.ReLU(),
-                                 nn.Linear(64, 32),
-                                 nn.ReLU(),
-                                 nn.Linear(32, 1))
-
-    def compute(self, inputs, role):
-        return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
+from Models.WorldModel import WorldModel
+from Models.VAE import VAE
+from Models.MDNRNN import MDNRNN
+from Trainers.WorldModelSequentialTrainer import WorldModelSequentialTrainer
+from Utils.TransformerWrapper import TransformWrapper
 
 
-# instantiate the model (assumes there is a wrapped environment: env)
-critic = MLP(observation_space=env.observation_space,
-             action_space=env.action_space,
-             device=env.device,
-             clip_actions=False)
-class MLP(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False):
-        Model.__init__(self, observation_space, action_space, device)
-        DeterministicMixin.__init__(self, clip_actions)
+env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
+env = TransformWrapper(env)
+env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x%100)
+device = 'cpu'
+# instantiate a memory as experience replay
+memory = RandomMemory(memory_size=15000, num_envs=1, device=device, replacement=False)
 
-        self.net = nn.Linear(self.observation_space.shape[0], self.action_space.n)
+wandb_logger = WandbLogger(log_model="all")
 
-    def compute(self, inputs, role):
-        return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
 
+# latent z shape + hidden rnn shape
+observation_space = gym.spaces.Box(low = np.zeros(32+64,),  high = np.ones(32+64,),dtype = np.float16)
 
 # instantiate the model (assumes there is a wrapped environment: env)
-controller = MLP(observation_space=env.observation_space,
+critic = CriticMLP(observation_space=observation_space,
              action_space=env.action_space,
-             device=env.device,
+             device=device,
              clip_actions=False)
+policy = ActorMLP(observation_space=observation_space,
+             action_space=env.action_space,
+             device=device)
+
+
+vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:v0"
+mdnrnn_checkpoint_reference = "team-good-models/model-registry/WorldModelMDNRNN:v0"
+
+vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
+mdnrnn_dir = wandb_logger.download_artifact(mdnrnn_checkpoint_reference, artifact_type="model")
+
+vae = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
+mdnrnn = MDNRNN.load_from_checkpoint(Path(mdnrnn_dir) / "model.ckpt")
+
+world_model = WorldModel(observation_space=env.observation_space,
+             action_space=env.action_space,
+             vae = vae,
+             mdnrnn = mdnrnn,
+             device = device)
 
 # instantiate the agent's models
 models = {}
-models["q_network"] = controller
-# models["target_q_network"] = ...  # only required during training
+models["policy"] = policy
+models["value"] = critic  # only required during training
 
 # adjust some configuration if necessary
-cfg_agent = DQN_DEFAULT_CONFIG.copy()
+cfg_agent = A2C_DEFAULT_CONFIG.copy()
+cfg_agent['learning_starts'] = 15000
+
+cfg_agent['experiment']['wandb'] = True
+cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
+
 
 # instantiate the agent
 # (assuming a defined environment <env> and memory <memory>)
-agent = DQN(models=models,
+agent = A2C(models=models,
             memory=memory,  # only required during training
             cfg=cfg_agent,
-            observation_space=env.observation_space,
+            observation_space=observation_space,
             action_space=env.action_space,
-            device=env.device)
+            device=device)
+
+
+# configure and instantiate the RL trainer
+cfg_trainer = {"timesteps": 1000000, "headless": True}
+trainer = WorldModelSequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ], world_model = world_model)
+
+# start training
+trainer.train()

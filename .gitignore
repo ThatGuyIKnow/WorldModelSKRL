@@ -8,3 +8,5 @@ data/
 artifacts/
 videos/
 wandb/
+videos/ALE/
+*.mp4

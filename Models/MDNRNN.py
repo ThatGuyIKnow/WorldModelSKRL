@@ -41,7 +41,9 @@ class MDRNNCell(nn.Module):
             - rs: (BSIZE) torch tensor
             - ds: (BSIZE) torch tensor
         """
-        #action = action.view((*action.shape, 1))
+        if action.shape[-1] == 1:
+            action = F.one_hot(action, self.actions).view(action.shape[0], self.actions)       
+        #action = actin.view((*action.shape, 1))
         in_al = torch.cat([action, latent], dim=-1)
 
         #in_al = in_al.view(*in_al.shape[1:])
