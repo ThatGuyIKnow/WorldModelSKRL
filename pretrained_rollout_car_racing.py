@@ -40,7 +40,7 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
 
     policy = ActorMLP(observation_space=observation_space,
                       action_space=env.action_space,
-                      device='cpu')
+                      device='cuda')
     policy.load(Path(policy_dir) / "actorPolicy.pt")
 
     world_model_agent = WorldModelAgent(vae_dir = Path(vae_dir) / "model.ckpt",
