@@ -2,11 +2,11 @@ import os
 
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.loggers import WandbLogger
 import torch
 import torch.utils.data as data
 from lightning.pytorch.callbacks import Callback, LearningRateMonitor, ModelCheckpoint
 import torchvision
-from torchvision import transforms
 
 from Models.VAE import VAE
 from Utils.DataOnlyLoader import DataOnlyLoader
@@ -47,7 +47,8 @@ class GenerateCallback(Callback):
             # Plot and add to tensorboard
             imgs = torch.stack([input_imgs, reconst_imgs], dim=1).flatten(0, 1)
             grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True)
-            trainer.logger.experiment.add_image("Reconstructions", grid, global_step=trainer.global_step)
+            trainer.logger.log_image(key="Reconstructions", images=[grid], step=trainer.global_step)
+
 
 
 def get_car_racing_dataset():
@@ -70,6 +71,7 @@ def get_car_racing_dataset():
 def train_vae(latent_dim=32):
     train_dataset, train_loader, val_loader = get_car_racing_dataset()
     # Create a PyTorch Lightning trainer with the generation callback
+    wandb_logger = WandbLogger(log_model="all")
     training_images = torch.stack([train_dataset[i][0] for i in range(8)], dim=0)
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "vae_%i" % latent_dim),
@@ -82,6 +84,7 @@ def train_vae(latent_dim=32):
             LearningRateMonitor("epoch"),
             EarlyStopping(monitor='val_loss', mode='min', patience=30)
         ],
+        logger=wandb_logger,
     )
     trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
