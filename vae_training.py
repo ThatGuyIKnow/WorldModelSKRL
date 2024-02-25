@@ -77,12 +77,12 @@ def train_vae(latent_dim=32):
         default_root_dir=os.path.join(CHECKPOINT_PATH, "vae_%i" % latent_dim),
         accelerator="auto",
         devices=1,
-        max_epochs=500,
+        max_epochs=50,
         callbacks=[
             ModelCheckpoint(save_weights_only=True),
             GenerateCallback(training_images, every_n_epochs=10),
             LearningRateMonitor("epoch"),
-            EarlyStopping(monitor='val_loss', mode='min', patience=30)
+            EarlyStopping(monitor='train_loss', mode='min', patience=3)
         ],
         logger=wandb_logger,
     )
