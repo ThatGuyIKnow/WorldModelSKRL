@@ -279,8 +279,18 @@ class MDNRNN(L.LightningModule):
             'test_loss': loss
         })
 
-
     def on_after_batch_transfer(self, batch, dataloader_idx):
         if self.encoding is not None:
-            batch['images'] = self.encoding(batch['images'])
+            packed_images = batch['images']
+            unpacked_images, lengths = torch.nn.utils.rnn.pad_packed_sequence(packed_images, batch_first=True)
+
+            # Apply your encoding function to the unpacked images
+            encoded_images = self.encoding(unpacked_images)
+
+            # Repack the encoded images
+            packed_encoded_images = torch.nn.utils.rnn.pack_padded_sequence(encoded_images, lengths, batch_first=True)
+
+            # Update the batch with the packed encoded images
+            batch['images'] = packed_encoded_images
+
         return batch
