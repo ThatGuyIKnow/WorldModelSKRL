@@ -128,7 +128,6 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
     # Create a PyTorch Lightning trainer with the generation callback
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % latent_dim),
-        accelerator="auto",
         devices=1,
         max_epochs=500,
         callbacks=[
