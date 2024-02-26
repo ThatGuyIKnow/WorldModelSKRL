@@ -287,9 +287,9 @@ class MDNRNN(L.LightningModule):
 
             unpacked_images = unpacked_images.reshape(-1, *unpacked_images.shape[2:])
             # Apply your encoding function to the unpacked images
-            encoded_images = self.encoding(unpacked_images)
+            _, _, encoded_images = self.encoding(unpacked_images)
 
-            _, _, encoded_images = encoded_images.reshape(*shape, *encoded_images.shape[1:])
+            encoded_images = encoded_images.reshape(*shape, *encoded_images.shape[1:])
             # Repack the encoded images
             packed_encoded_images = torch.nn.utils.rnn.pack_padded_sequence(encoded_images, lengths, batch_first=True)
 
