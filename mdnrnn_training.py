@@ -56,12 +56,12 @@ class GenerateCallback(L.Callback):
         self.encoder = vae.encoder
         self.decoder = vae.decoder
 
-        self.input_actions = nn.utils.rnn.pack_sequence([img['actions'] for img in input_imgs])
+        self.input_actions = nn.utils.rnn.pack_sequence([img['actions'].to(device) for img in input_imgs])
         self.input_imgs = torch.stack([img['images'][-1] for img in input_imgs]).unsqueeze(dim=1).to(device)
         self.sample_count = len(self.input_imgs)
 
         input_latent = torch.stack([self._to_latent(img['images'].to(device)) for img in input_imgs])  # Latents to reconstruct during training
-        self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1])
+        self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1].to(device))
         
         self.image_reconst = self.decoder(input_latent[:, -1])
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
