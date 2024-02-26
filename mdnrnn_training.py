@@ -97,7 +97,7 @@ class GenerateCallback(L.Callback):
 
 def get_car_racing_dataset():
     # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, encoding=encoding_model.encoder, action_space=5)    
+    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5)    
     train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
 
     # We define a set of data loaders that we can use for various purposes later.
@@ -147,8 +147,10 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
     if os.path.isfile(pretrained_filename):
         print("Found pretrained model, loading...")
         model = MDNRNN.load_from_checkpoint(pretrained_filename)
+        model.encoding = encoding_model.encoder
     else:
         model = MDNRNN(latent_dim, action_space, h_space, gaussian_space, device=device)
+        model.encoding = encoding_model.encoder
         trainer.fit(model, train_loader, val_loader)
     # Test best model on validation and test set
     val_result = trainer.test(model, dataloaders=val_loader, verbose=False)

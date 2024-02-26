@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 class EpisodeDataset(Dataset):
-    def __init__(self, csv_file, transform=None, encoding = None, action_space = None, device="cuda"):
+    def __init__(self, csv_file, transform=None, encoding = None, action_space = None):
         """
         Initializes the dataset.
         
@@ -21,8 +21,6 @@ class EpisodeDataset(Dataset):
         else:
             self.action_space = action_space
         self.encoding = encoding
-        self.device = device
-        
     def __len__(self):
         return len(self.episode_data['Episode'].unique())
 
@@ -41,7 +39,7 @@ class EpisodeDataset(Dataset):
             if self.transform:
                 image = self.transform(image)
             if self.encoding is not None:
-                _, _, image = self.encoding(image.to(self.device))
+                _, _, image = self.encoding(image)
                 image = image.squeeze(dim=0).clone().detach()
             images.append(image)
             actions.append(row['Action'])

@@ -88,6 +88,7 @@ class MDNRNN(L.LightningModule):
                  gaussian_space: Union[int, Tuple[int], gym.Space, gymnasium.Space],                 
                  lookahead: int = 1,
                  temperature: float = 0.2,
+                 encoding = None,
                  device: Union[str, torch.device] = 'cuda'):
         super().__init__()
 
@@ -107,6 +108,8 @@ class MDNRNN(L.LightningModule):
         self.lookahead = lookahead
 
         self.cell = MDRNNCell(self.latent_space, self.action_space, self.h_space, self.gaussian_space)
+
+        self.encoding = encoding
 
     @property
     def rnn_space(self):
@@ -276,3 +279,8 @@ class MDNRNN(L.LightningModule):
             'test_loss': loss
         })
 
+
+    def on_after_batch_transfer(self, batch, dataloader_idx):
+        if self.encoding is not None:
+            batch = self.encoding(batch)
+        return batch
