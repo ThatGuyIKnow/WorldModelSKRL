@@ -60,7 +60,7 @@ class GenerateCallback(L.Callback):
         self.input_imgs = torch.stack([img['images'][-1] for img in input_imgs]).unsqueeze(dim=1).to(device)
         self.sample_count = len(self.input_imgs)
 
-        input_latent = torch.stack([self._to_latent(img['images']) for img in input_imgs])  # Latents to reconstruct during training
+        input_latent = torch.stack([self._to_latent(img['images'].to(device)) for img in input_imgs])  # Latents to reconstruct during training
         self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1])
         
         self.image_reconst = self.decoder(input_latent[:, -1])
