@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 class EpisodeDataset(Dataset):
-    def __init__(self, csv_file, transform=None, encoding = None):
+    def __init__(self, csv_file, transform=None, encoding = None, action_space = None):
         """
         Initializes the dataset.
         
@@ -16,7 +16,10 @@ class EpisodeDataset(Dataset):
         """
         self.episode_data = pd.read_csv(csv_file)
         self.transform = transform
-        self.action_space = len(self.episode_data['Action'].unique())
+        if action_space is None:
+            self.action_space = len(self.episode_data['Action'].unique())
+        else:
+            self.action_space = action_space
         self.encoding = encoding
     def __len__(self):
         return len(self.episode_data['Episode'].unique())
