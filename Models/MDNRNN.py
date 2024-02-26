@@ -282,5 +282,5 @@ class MDNRNN(L.LightningModule):
 
     def on_after_batch_transfer(self, batch, dataloader_idx):
         if self.encoding is not None:
-            batch = self.encoding(batch)
+            batch['images'] = self.encoding(batch['images'])
         return batch
