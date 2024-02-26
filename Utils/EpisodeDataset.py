@@ -22,7 +22,7 @@ class EpisodeDataset(Dataset):
             self.action_space = action_space
         self.encoding = encoding
         self.device = device
-
+        
     def __len__(self):
         return len(self.episode_data['Episode'].unique())
 
@@ -41,7 +41,7 @@ class EpisodeDataset(Dataset):
             if self.transform:
                 image = self.transform(image)
             if self.encoding is not None:
-                _, _, image = self.encoding(image)
+                _, _, image = self.encoding(image.to(self.device))
                 image = image.squeeze(dim=0).clone().detach()
             images.append(image)
             actions.append(row['Action'])
@@ -50,10 +50,10 @@ class EpisodeDataset(Dataset):
 
         actions = torch.tensor(actions, dtype=torch.long)
 
-        images = torch.stack(images).to(self.device)
-        actions = F.one_hot(actions, self.action_space).float().to(self.device) 
-        rewards =  torch.tensor(rewards, dtype=torch.float).to(self.device)
-        dones = torch.tensor(dones, dtype=torch.float).to(self.device)
+        images = torch.stack(images)
+        actions = F.one_hot(actions, self.action_space).float() 
+        rewards =  torch.tensor(rewards, dtype=torch.float)
+        dones = torch.tensor(dones, dtype=torch.float)
         
         images.requires_grad = True
         actions.requires_grad = True
