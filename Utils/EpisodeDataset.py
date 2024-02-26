@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 class EpisodeDataset(Dataset):
-    def __init__(self, csv_file, transform=None, encoding = None, action_space = None):
+    def __init__(self, csv_file, transform=None, encoding = None, action_space = None, device="cuda"):
         """
         Initializes the dataset.
         
@@ -21,6 +21,8 @@ class EpisodeDataset(Dataset):
         else:
             self.action_space = action_space
         self.encoding = encoding
+        self.device = device
+
     def __len__(self):
         return len(self.episode_data['Episode'].unique())
 
@@ -48,10 +50,10 @@ class EpisodeDataset(Dataset):
 
         actions = torch.tensor(actions, dtype=torch.long)
 
-        images = torch.stack(images)
-        actions = F.one_hot(actions, self.action_space).float() 
-        rewards =  torch.tensor(rewards, dtype=torch.float)
-        dones = torch.tensor(dones, dtype=torch.float)
+        images = torch.stack(images).to(self.device)
+        actions = F.one_hot(actions, self.action_space).float().to(self.device) 
+        rewards =  torch.tensor(rewards, dtype=torch.float).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.float).to(self.device)
         
         images.requires_grad = True
         actions.requires_grad = True
