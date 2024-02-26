@@ -138,6 +138,7 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
             EarlyStopping(monitor='train_loss', mode='min', patience=30)
         ],
         logger=wandb_logger,
+        accelerator="cuda",
     )
     trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
