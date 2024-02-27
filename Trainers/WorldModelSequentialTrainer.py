@@ -146,7 +146,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
             with torch.no_grad():
                 if terminated.any() or truncated.any():
                     states, infos = self.env.reset()
-                    latent = self.world_model.to_latent(torch.Tensor(states))
+                    states = torch.Tensor(states).to(self.device)
+                    latent = self.world_model.to_latent()
                     h_state = self.world_model.initial_state()
                     enc_states = torch.concat([latent, h_state[0]], dim=-1)
                     
@@ -183,7 +184,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
 
         # reset env
         states, infos = self.env.reset()
-        latent = self.world_model.to_latent(torch.Tensor(states))
+        states = torch.Tensor(states).to(self.device)
+        latent = self.world_model.to_latent(states)
         h_state = self.world_model.initial_state()
         enc_states = torch.concat([latent, h_state[0]], dim=-1)
 
@@ -206,10 +208,11 @@ class WorldModelSequentialTrainer(SequentialTrainer):
 
                 selected_action = actions.item()
                 next_states, rewards, terminated, truncated, infos = self.env.step(selected_action)
-                rewards = torch.Tensor([rewards])
-                terminated = torch.Tensor([terminated])
-                truncated = torch.Tensor([truncated])
-                next_latent = self.world_model.to_latent(torch.Tensor(next_states))
+                next_states = torch.Tensor(next_states).to(self.device)
+                rewards = torch.Tensor([rewards]).to(self.device)
+                terminated = torch.Tensor([terminated]).to(self.device)
+                truncated = torch.Tensor([truncated]).to(self.device)
+                next_latent = self.world_model.to_latent(next_states)
 
                 next_h_state = self.world_model.step(actions, next_latent, h_state)
                 next_enc_states = torch.concat([next_latent, next_h_state[0]], dim=-1)
@@ -240,7 +243,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
             with torch.no_grad():
                 if terminated.any() or truncated.any():
                     states, infos = self.env.reset()
-                    latent = self.world_model.to_latent(torch.Tensor(states))
+                    states = torch.Tensor(states).to(self.device)
+                    latent = self.world_model.to_latent(states)
                     h_state = self.world_model.initial_state()
                     enc_states = torch.concat([latent, h_state[0]], dim=-1)
                     
