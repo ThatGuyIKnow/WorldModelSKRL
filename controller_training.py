@@ -1,4 +1,5 @@
 # import the agent and its default configuration
+from typing import Callable
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 
 import numpy as np
@@ -6,6 +7,9 @@ import gymnasium as gym
 from skrl.memories.torch import RandomMemory
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
+import torch
+
+import wandb
 from Models.A2CModel import ActorMLP, CriticMLP
 
 from Models.WorldModel import WorldModel
@@ -15,13 +19,34 @@ from Trainers.WorldModelSequentialTrainer import WorldModelSequentialTrainer
 from Utils.TransformerWrapper import TransformWrapper
 
 
-env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
-env = TransformWrapper(env)
-env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x%100)
-device = 'cpu'
-# instantiate a memory as experience replay
-memory = RandomMemory(memory_size=15000, num_envs=1, device=device, replacement=False)
 
+class WandbRecordVideo(gym.wrappers.RecordVideo):
+    def __init__(
+        self,
+        env: gym.Env,
+        video_folder: str,
+        episode_trigger: Callable[[int], bool] = None,
+        step_trigger: Callable[[int], bool] = None,
+        video_length: int = 0,
+        name_prefix: str = "rl-video",
+        disable_logger: bool = False,
+        agent = None
+    ):
+        super().__init__(env, video_folder, episode_trigger, step_trigger, video_length, name_prefix, disable_logger)
+        self.agent = agent
+
+    def close_video_recorder(self):
+        if self.recording and self.agent is not None:
+            path = self.video_recorder.path
+            super().close_video_recorder()
+            wandb.log({"Episode": wandb.Video(path, fps=4, format="gif")})
+        else:
+            super().close_video_recorder()
+
+
+
+env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
+device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 wandb_logger = WandbLogger(log_model="all")
 
 
@@ -72,6 +97,9 @@ cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
 
 
+# instantiate a memory as experience replay
+memory = RandomMemory(memory_size=15000, num_envs=1, device=device, replacement=False)
+
 # instantiate the agent
 # (assuming a defined environment <env> and memory <memory>)
 agent = PPO(models=models,
@@ -81,6 +109,9 @@ agent = PPO(models=models,
             action_space=env.action_space,
             device=device)
 
+
+env = TransformWrapper(env)
+env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 100, agent=agent)
 
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 1000000, "headless": True}
