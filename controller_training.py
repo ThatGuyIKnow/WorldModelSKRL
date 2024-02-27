@@ -8,6 +8,7 @@ from skrl.memories.torch import RandomMemory
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
 import torch
+from torchvision.io import read_video
 
 import wandb
 from Models.A2CModel import ActorMLP, CriticMLP
@@ -17,7 +18,7 @@ from Models.VAE import VAE
 from Models.MDNRNN import MDNRNN
 from Trainers.WorldModelSequentialTrainer import WorldModelSequentialTrainer
 from Utils.TransformerWrapper import TransformWrapper
-
+from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 
 
 class WandbRecordVideo(gym.wrappers.RecordVideo):
@@ -30,23 +31,31 @@ class WandbRecordVideo(gym.wrappers.RecordVideo):
         video_length: int = 0,
         name_prefix: str = "rl-video",
         disable_logger: bool = False,
+        agent = None
     ):
         super().__init__(env, video_folder, episode_trigger, step_trigger, video_length, name_prefix, disable_logger)
 
+        self.agent = agent
+
     def close_video_recorder(self):
         if self.recording:
-            path = self.video_recorder.path
+            clip = np.moveaxis(np.array(self.video_recorder.recorded_frames), -1, 1)
+            clip = np.expand_dims(clip, 0)
             super().close_video_recorder()
-            wandb.log({"Episode": wandb.Video(path, fps=4, format="gif")})
+            self.agent.writer.add_video('Episode', clip, global_step=self.episode_id)
         else:
             super().close_video_recorder()
 
+
+    def load_video_as_tensor(self, video_path):
+        video, _, _ = read_video(video_path, pts_unit='sec')
+        video_tensor = video.permute(0, 3, 1, 2).unsqueeze(0)  # Reshape to (batch_size, channels, height, width)
+        return video_tensor
 
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
 env = TransformWrapper(env)
-env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 100)
 
 wandb_logger = WandbLogger(log_model="all")
 
@@ -111,6 +120,7 @@ agent = PPO(models=models,
             device=device)
 
 
+env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 300, agent=agent)
 
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 1000000, "headless": True}
