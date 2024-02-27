@@ -201,7 +201,8 @@ class MDNRNN(L.LightningModule):
         
         unpacked_batch_terminations = nn.utils.rnn.unpack_sequence(batch_terminations)
         unpacked_batch_reward = nn.utils.rnn.unpack_sequence(batch_rewards)
-        # ALL THESE LOSSES LOSSES THE GRADIENT. FIX
+        
+        
         gmm_loss = gaussian_mixture_loss(batch_latent, mus, sigmas, logpi)
         termination_loss = bce_with_logits_list(ds, unpacked_batch_terminations)
         reward_loss = mse_loss_list(rs, unpacked_batch_reward)

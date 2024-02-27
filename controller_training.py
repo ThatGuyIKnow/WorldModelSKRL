@@ -38,14 +38,14 @@ policy = ActorMLP(observation_space=observation_space,
              device=device)
 
 
-vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:v0"
-mdnrnn_checkpoint_reference = "team-good-models/model-registry/WorldModelMDNRNN:v0"
+vae_checkpoint_reference = "team-good-models/model-registry/PretrainedWorldModelVAE:v0"
+mdnrnn_checkpoint_reference = "team-good-models/model-registry/PretrainedMDNRNNWorldModel:v0"
 
 vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
 mdnrnn_dir = wandb_logger.download_artifact(mdnrnn_checkpoint_reference, artifact_type="model")
 
 vae = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
-mdnrnn = MDNRNN.load_from_checkpoint(Path(mdnrnn_dir) / "model.ckpt")
+mdnrnn = MDNRNN.load_from_checkpoint(Path(mdnrnn_dir) / "model.ckpt", strict=False)
 
 world_model = WorldModel(observation_space=env.observation_space,
              action_space=env.action_space,
