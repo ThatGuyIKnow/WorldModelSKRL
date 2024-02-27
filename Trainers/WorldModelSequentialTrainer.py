@@ -87,7 +87,7 @@ class WorldModelSequentialTrainer(SequentialTrainer):
 
         # reset env
         states, infos = self.env.reset()
-        states.to(self.device)
+        states = states.to(self.device)
         latent = self.world_model.to_latent(torch.Tensor(states))
         h_state = self.world_model.initial_state()
         enc_states = torch.concat([latent, h_state[0]], dim=-1)
