@@ -30,13 +30,11 @@ class WandbRecordVideo(gym.wrappers.RecordVideo):
         video_length: int = 0,
         name_prefix: str = "rl-video",
         disable_logger: bool = False,
-        agent = None
     ):
         super().__init__(env, video_folder, episode_trigger, step_trigger, video_length, name_prefix, disable_logger)
-        self.agent = agent
 
     def close_video_recorder(self):
-        if self.recording and self.agent is not None:
+        if self.recording:
             path = self.video_recorder.path
             super().close_video_recorder()
             wandb.log({"Episode": wandb.Video(path, fps=4, format="gif")})
@@ -44,9 +42,12 @@ class WandbRecordVideo(gym.wrappers.RecordVideo):
             super().close_video_recorder()
 
 
+device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
-device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+env = TransformWrapper(env)
+env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 100)
+
 wandb_logger = WandbLogger(log_model="all")
 
 
@@ -110,12 +111,10 @@ agent = PPO(models=models,
             device=device)
 
 
-env = TransformWrapper(env)
-env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 100, agent=agent)
 
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 1000000, "headless": True}
-trainer = WorldModelSequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ], world_model = world_model)
+trainer = WorldModelSequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ], world_model = world_model, device=device)
 
 # start training
 trainer.train()

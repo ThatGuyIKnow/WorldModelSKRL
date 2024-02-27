@@ -28,7 +28,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
                  agents: Union[Agent, List[Agent]],
                  world_model: Model,
                  agents_scope: Optional[List[int]] = None,
-                 cfg: Optional[dict] = None) -> None:
+                 cfg: Optional[dict] = None,
+                 device = 'cuda') -> None:
         """Sequential trainer
 
         Train agents sequentially (i.e., one after the other in each interaction with the environment)
@@ -56,6 +57,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
                 agent.init(trainer_cfg=self.cfg)
         else:
             self.agents.init(trainer_cfg=self.cfg)
+        
+        self.device = device
     
     def rand_argmax(self, tens):
         _, max_inds = torch.where(tens == tens.max())
@@ -84,6 +87,7 @@ class WorldModelSequentialTrainer(SequentialTrainer):
 
         # reset env
         states, infos = self.env.reset()
+        states.to(self.device)
         latent = self.world_model.to_latent(torch.Tensor(states))
         h_state = self.world_model.initial_state()
         enc_states = torch.concat([latent, h_state[0]], dim=-1)
