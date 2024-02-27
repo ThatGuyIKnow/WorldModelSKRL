@@ -1,5 +1,5 @@
 # import the agent and its default configuration
-from skrl.agents.torch.a2c import A2C, A2C_DEFAULT_CONFIG
+from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 
 import numpy as np
 import gymnasium as gym
@@ -59,10 +59,15 @@ models["policy"] = policy
 models["value"] = critic  # only required during training
 
 # adjust some configuration if necessary
-cfg_agent = A2C_DEFAULT_CONFIG.copy()
+cfg_agent = PPO_DEFAULT_CONFIG.copy()
 cfg_agent['learning_starts'] = 15000
+cfg_agent['random_timesteps'] = 30000
 cfg_agent['entropy_loss_scale'] = 1e-2
-cfg_agent['learning_rate'] = 1e-4
+cfg_agent['learning_rate'] = 2.5e-4
+cfg_agent['mini_batches'] = 4
+cfg_agent['learning_epochs'] = 4
+cfg_agent['vf_coef'] = 0.5
+cfg_agent['rollouts'] = 64
 
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
@@ -70,7 +75,7 @@ cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
 
 # instantiate the agent
 # (assuming a defined environment <env> and memory <memory>)
-agent = A2C(models=models,
+agent = PPO(models=models,
             memory=memory,  # only required during training
             cfg=cfg_agent,
             observation_space=observation_space,
