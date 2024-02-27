@@ -120,7 +120,7 @@ agent = PPO(models=models,
             device=device)
 
 
-env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 300, agent=agent)
+env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0, agent=agent)
 
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 1000000, "headless": True}
