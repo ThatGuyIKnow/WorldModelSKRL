@@ -111,10 +111,10 @@ class WorldModelSequentialTrainer(SequentialTrainer):
 
                 selected_action = actions.item()
                 next_states, rewards, terminated, truncated, infos = self.env.step(selected_action)
-                rewards = torch.Tensor([rewards])
-                terminated = torch.Tensor([terminated])
-                truncated = torch.Tensor([truncated])
-                next_latent = self.world_model.to_latent(torch.Tensor(next_states))
+                rewards = torch.Tensor([rewards], device=self.device)
+                terminated = torch.Tensor([terminated], device=self.device)
+                truncated = torch.Tensor([truncated], device=self.device)
+                next_latent = self.world_model.to_latent(torch.Tensor(next_states, device=self.device))
 
                 next_h_state = self.world_model.step(actions, next_latent, h_state)
                 next_enc_states = torch.concat([next_latent, next_h_state[0]], dim=-1)
