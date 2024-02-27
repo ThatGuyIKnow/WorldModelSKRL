@@ -61,7 +61,6 @@ models["value"] = critic  # only required during training
 # adjust some configuration if necessary
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
 cfg_agent['learning_starts'] = 15000
-cfg_agent['random_timesteps'] = 30000
 cfg_agent['entropy_loss_scale'] = 1e-2
 cfg_agent['learning_rate'] = 2.5e-4
 cfg_agent['mini_batches'] = 4
