@@ -62,6 +62,7 @@ models["value"] = critic  # only required during training
 cfg_agent = A2C_DEFAULT_CONFIG.copy()
 cfg_agent['learning_starts'] = 15000
 cfg_agent['entropy_loss_scale'] = 1e-2
+cfg_agent['learning_rate'] = 1e-4
 
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
