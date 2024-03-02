@@ -17,37 +17,45 @@ from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
 
 from Utils.EpisodeDataset import EpisodeDataset
+from Utils.TransformerWrapper import TransformWrapper
 
-
-# Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
+# Data Paths
 DATASET_PATH = 'data/carracing-v2/main_details_simulation.csv'
-# Path to the folder where the pretrained models are saved
 CHECKPOINT_PATH = 'runs'
 
+# Training parameters
+SEED = 42
+DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+BATCH_SIZE = 16
+NUM_WORKERS = 4
+MAX_EPOCHS = 500
+EARLY_STOPPING_PATIENCE = 30
+
+# Model parameters
+ACTION_SPACE = 3
+LATENT_DIM =  32
+SEQ_LENGTH = 32
+H_SPACE = 64
+GAUSSIAN_SPACE = 5
+
+# Logging and Model Saving
+WANDB_KWARGS = {'log_model': "all"}
+VAE_CHECKPOINT_REFERENCE = "team-good-models/model-registry/WorldModelVAE:latest"
+
 # Setting the seed
-L.seed_everything(42)
+L.seed_everything(SEED)
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+print("Device:", DEVICE)
 
-device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-print("Device:", device)
+wandb_logger = WandbLogger(**WANDB_KWARGS)
+vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
+encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
 
-
-wandb_logger = WandbLogger(log_model="all")
-vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:latest"
-vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
-encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(device)
-
-# Transformations applied on each image => only make them a tensor
-transform = transforms.Compose([
-    transforms.Grayscale(), 
-    transforms.ToTensor(), 
-    transforms.Normalize((0.5,), (0.5,)), 
-    transforms.Resize((64, 64), antialias=True),
-    ])
+transform = TransformWrapper.transform
 
 class GenerateCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
@@ -57,15 +65,14 @@ class GenerateCallback(L.Callback):
         self.encoder = vae.encoder
         self.decoder = vae.decoder
 
-        self.input_actions = nn.utils.rnn.pack_sequence([img['actions'].to(device) for img in input_imgs])
-        self.input_imgs = torch.stack([img['images'][-1] for img in input_imgs]).unsqueeze(dim=1).to(device)
+        self.input_actions = nn.utils.rnn.pack_sequence([img['actions'].to(DEVICE) for img in input_imgs])
+        self.input_imgs = torch.stack([img['images'][-1] for img in input_imgs]).unsqueeze(dim=1).to(DEVICE)
         self.sample_count = len(self.input_imgs)
 
-        input_latent = torch.stack([self._to_latent(img['images'].to(device)) for img in input_imgs])  # Latents to reconstruct during training
-        self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1].to(device))
+        input_latent = torch.stack([self._to_latent(img['images'].to(DEVICE)) for img in input_imgs])  # Latents to reconstruct during training
+        self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1].to(DEVICE))
         
         self.image_reconst = self.decoder(input_latent[:, -1])
-        # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.every_n_epochs = every_n_epochs
 
     def _to_latent(self, image):
@@ -74,7 +81,6 @@ class GenerateCallback(L.Callback):
 
     def on_train_epoch_end(self, trainer, pl_module):
         if trainer.current_epoch % self.every_n_epochs == 0:
-            # Reconstruct images
             input_latent = self.input_latent.to(pl_module.device)
             with torch.no_grad():
                 pl_module.eval()
@@ -87,24 +93,22 @@ class GenerateCallback(L.Callback):
                 next_latents = pl_module.sample(mus, sigmas, logpis)
                 reconst_imgs = self.decoder(torch.stack(next_latents))
                 pl_module.train()
-            # Plot and add to tensorboard
+
             imgs = torch.stack([self.input_imgs[:, -1], self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
             grid = torchvision.utils.make_grid(imgs, nrow=3, normalize=True)
             trainer.logger.log_image(key="Reconstructions_Next_Step", images=[grid], step=trainer.global_step)
 
 def get_car_racing_dataset():
-    # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5, seq_length=32)    
+    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH)    
     train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
 
-    # We define a set of data loaders that we can use for various purposes later.
-    train_loader = data.DataLoader(train_set, batch_size=16, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
-    val_loader = data.DataLoader(val_set, batch_size=16, shuffle=False, drop_last=False, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
+    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)
+    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)
 
     return train_loader, val_loader
 
 def get_seq_input_imgs(n=8, p=0.5):
-    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5)
+    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE)
     seqs = []
     idx = np.random.randint(0, len(dataset), size=n)
     for i in idx:
@@ -119,44 +123,38 @@ def get_seq_input_imgs(n=8, p=0.5):
         seqs.append(seq)
     return seqs
 
-def train_mdnrnn(latent_dim=32, action_space=3, h_space=64, gaussian_space=64):
+def train_mdnrnn():
     train_loader, val_loader = get_car_racing_dataset()
     input_seqs = get_seq_input_imgs()
 
-    
     wandb_logger = WandbLogger(log_model="all", prefix='mdnrnn')
-    # Create a PyTorch Lightning trainer with the generation callback
     trainer = L.Trainer(
-        default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % latent_dim),
+        default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % LATENT_DIM),
         devices=1,
-        max_epochs=500,
+        max_epochs=MAX_EPOCHS,
         callbacks=[
-            GenerateCallback(input_seqs, encoding_model, action_space, 1),
+            GenerateCallback(input_seqs, encoding_model, ACTION_SPACE, 1),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
-            EarlyStopping(monitor='val_loss', mode='min', patience=30, check_on_train_epoch_end=False)
+            EarlyStopping(monitor='val_loss', mode='min', patience=EARLY_STOPPING_PATIENCE, check_on_train_epoch_end=False)
         ],
         logger=wandb_logger,
         accelerator="auto",
     )
-    trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
-    trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
+    trainer.logger._log_graph = True
+    trainer.logger._default_hp_metric = None
 
-
-
-    # Check whether pretrained model exists. If yes, load it and skip training
     pretrained_filename = os.path.join(CHECKPOINT_PATH, "mdnrnn_best.ckpt")
     if os.path.isfile(pretrained_filename):
         print("Found pretrained model, loading...")
         model = MDNRNN.load_from_checkpoint(pretrained_filename)
         model.encoding = encoding_model.encoder
     else:
-        model = MDNRNN(latent_dim, action_space, h_space, gaussian_space, device=device)
+        model = MDNRNN(LATENT_DIM, ACTION_SPACE, H_SPACE, GAUSSIAN_SPACE, device=DEVICE)
         model.encoding = encoding_model.encoder
         trainer.fit(model, train_loader, val_loader)
-    # Test best model on validation and test set
     val_result = trainer.test(model, dataloaders=val_loader, verbose=False)
     result = {"val": val_result}
     return model, result
 
-train_mdnrnn(32, 3, 64, 5)
+train_mdnrnn()
