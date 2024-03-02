@@ -39,7 +39,7 @@ print("Device:", device)
 wandb_logger = WandbLogger(log_model="all")
 vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:latest"
 vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
-encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
+encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(device)
 
 # Transformations applied on each image => only make them a tensor
 transform = transforms.Compose([
