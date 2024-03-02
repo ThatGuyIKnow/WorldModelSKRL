@@ -10,3 +10,6 @@ videos/
 wandb/
 videos/ALE/
 *.mp4
+*.ckpt
+*.tar
+*.pyc
