@@ -1,18 +1,20 @@
 import os
+import asyncio
 from pathlib import Path
 import gymnasium as gym
 import numpy as np
 from PIL import Image
 import csv
 import torch
+import multiprocessing
 
 from lightning.pytorch.loggers import WandbLogger
 from tqdm import tqdm
 from Agents.WorldModelA2C import WorldModelAgent
-from Models.A2CModel import ActorMLP
+from Models.AgentModel import ActorMLP
 from Utils.TransformerWrapper import TransformWrapper
 
-def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, max_eps_length=50, env_kwargs={}):
+async def rollout_and_save_images_with_csv_async(env_name, output_folder, worker_index, total_steps=1000, max_eps_length=50, env_kwargs={}):
     """
     Simulate a gym environment for a specified number of steps, save each frame as an image, 
     and record details (reward, done, action, image paths) in a CSV file.
@@ -20,8 +22,11 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
     Parameters:
     env_name (str): The name of the gym environment to simulate.
     output_folder (str): The directory where the images and CSV will be saved.
+    worker_index (int): The index of the worker.
     total_steps (int): The total number of steps to simulate across all episodes.
     """
+    output_folder_worker = os.path.join(output_folder, f"worker_{worker_index}")
+
     # Initialize the environment
     env = gym.make(env_name, render_mode='rgb_array', **env_kwargs)
     env = TransformWrapper(env)
@@ -49,35 +54,30 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
                                 action_space=env.action_space)
 
     # Ensure the output directory exists
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    if not os.path.exists(output_folder_worker):
+        os.makedirs(output_folder_worker)
 
-    csv_file_path = os.path.join(output_folder, 'details_simulation.csv')
+    csv_file_path = os.path.join(output_folder_worker, 'details_simulation.csv')
     with open(csv_file_path, 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Episode', 'Step', 'Action', 'Reward', 'Done', 'Truncated', 'ImagePath', 'NextImagePath'])
-
-
-    observation, infos = env.reset()
 
     episode = 0
     for step_count in tqdm(range(total_steps)):
         observation, _ = env.reset()
         world_model_agent.reset()
-        
+
+        tasks = []
         for eps_length in range(max_eps_length):
             # Render the environment to a numpy array and save as an image
             frame = env.render()
-            img_path = os.path.join(output_folder, f'episode_{episode}_step_{eps_length}.png')
+            img_path = os.path.join(output_folder_worker, f'episode_{episode}_step_{eps_length}.png')
             Image.fromarray(frame).save(img_path)
 
             action = world_model_agent(observation)  # Replace this with your action selection mechanism
             observation, reward, done, truncated, info = env.step(action)
-        
-            truncated |= eps_length > max_eps_length                
 
-            # Prepare next image path for CSV (None if simulation ends)
-            next_img_path = os.path.join(output_folder, f'episode_{episode}_step_{eps_length+1}.png') if not done else None
+            truncated |= eps_length > max_eps_length
 
             # Write details to CSV
             with open(csv_file_path, 'a', newline='') as file:
@@ -85,14 +85,27 @@ def rollout_and_save_images_with_csv(env_name, output_folder, total_steps=1000, 
                 writer.writerow([episode, eps_length, action, reward, done, truncated, img_path, next_img_path])
 
             if done or truncated:
+                next_frame = env.render()
+                next_img_path = os.path.join(output_folder_worker, f'episode_{episode}_step_{eps_length+1}.png')
+                Image.fromarray(next_frame).save(next_img_path)
+
                 observation, _ = env.reset()
                 world_model_agent.reset()
 
+            tasks.append(asyncio.sleep(0))
 
+        await asyncio.gather(*tasks)
         episode += 1
 
     env.close()
 
-
 # Example usage
-rollout_and_save_images_with_csv('CarRacing-v2', './data/pretrained_carracing-v2', total_steps=200, max_eps_length = 1000, env_kwargs={'continuous': False})
+async def main():
+    num_workers = 3
+    tasks = []
+    for worker_index in range(num_workers):
+        tasks.append(rollout_and_save_images_with_csv_async('CarRacing-v2', './data/pretrained_carracing-v22', worker_index, total_steps=100, max_eps_length=500, env_kwargs={'continuous': False}))
+    await asyncio.gather(*tasks)
+
+# Run the main function
+main()

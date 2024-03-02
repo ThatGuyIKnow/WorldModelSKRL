@@ -1,5 +1,6 @@
 import os
 from random import randint
+import numpy as np
 
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -19,7 +20,7 @@ from Utils.EpisodeDataset import EpisodeDataset
 
 
 # Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
-DATASET_PATH = 'data/pretrained_carracing-v2/details_simulation.csv'
+DATASET_PATH = 'data/carracing-v2/main_details_simulation.csv'
 # Path to the folder where the pretrained models are saved
 CHECKPOINT_PATH = 'runs'
 
@@ -36,7 +37,7 @@ print("Device:", device)
 
 
 wandb_logger = WandbLogger(log_model="all")
-vae_checkpoint_reference = "team-good-models/model-registry/PretrainedWorldModelVAE:v0"
+vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:latest"
 vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
 encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
 
@@ -71,16 +72,12 @@ class GenerateCallback(L.Callback):
         _, _, latent = self.encoder(image)
         return latent.squeeze(dim=0).clone().detach()
 
-    def _get_random_actions(self, c, s):
-        return torch.stack([F.one_hot(randint(c), c) for _ in range(s)])
-
     def on_train_epoch_end(self, trainer, pl_module):
         if trainer.current_epoch % self.every_n_epochs == 0:
             # Reconstruct images
             input_latent = self.input_latent.to(pl_module.device)
             with torch.no_grad():
                 pl_module.eval()
-#                actions = self._get_random_actions(self.action_space, self.sample_count)
                 mus, sigmas, logpis, _, _, _ = pl_module({'latent':input_latent, 'actions':self.input_actions})
 
                 mus = torch.stack(mus)[:, -1]
@@ -97,19 +94,20 @@ class GenerateCallback(L.Callback):
 
 def get_car_racing_dataset():
     # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5)    
+    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5, seq_length=32)    
     train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
 
     # We define a set of data loaders that we can use for various purposes later.
-    train_loader = data.DataLoader(train_set, batch_size=4, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
-    val_loader = data.DataLoader(val_set, batch_size=4, shuffle=False, drop_last=False, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
+    train_loader = data.DataLoader(train_set, batch_size=16, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
+    val_loader = data.DataLoader(val_set, batch_size=16, shuffle=False, drop_last=False, num_workers=4, collate_fn=EpisodeDataset.collate_fn)
 
     return train_loader, val_loader
 
-def get_seq_input_imgs(n=2, p=0.5):
+def get_seq_input_imgs(n=8, p=0.5):
     dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=5)
     seqs = []
-    for i in range(n):
+    idx = np.random.randint(0, len(dataset), size=n)
+    for i in idx:
         seq = dataset[i]
         seq_len = int(seq['images'].shape[0] * p)
 
@@ -121,10 +119,12 @@ def get_seq_input_imgs(n=2, p=0.5):
         seqs.append(seq)
     return seqs
 
-def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
+def train_mdnrnn(latent_dim=32, action_space=3, h_space=64, gaussian_space=64):
     train_loader, val_loader = get_car_racing_dataset()
     input_seqs = get_seq_input_imgs()
-    wandb_logger = WandbLogger(log_model="all")
+
+    
+    wandb_logger = WandbLogger(log_model="all", prefix='mdnrnn')
     # Create a PyTorch Lightning trainer with the generation callback
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % latent_dim),
@@ -134,13 +134,15 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
             GenerateCallback(input_seqs, encoding_model, action_space, 1),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
-            EarlyStopping(monitor='train_loss', mode='min', patience=30)
+            EarlyStopping(monitor='val_loss', mode='min', patience=30, check_on_train_epoch_end=False)
         ],
         logger=wandb_logger,
-        accelerator="cuda",
+        accelerator="auto",
     )
     trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
+
+
 
     # Check whether pretrained model exists. If yes, load it and skip training
     pretrained_filename = os.path.join(CHECKPOINT_PATH, "mdnrnn_best.ckpt")
@@ -157,4 +159,4 @@ def train_mdnrnn(latent_dim=32, action_space=5, h_space=64, gaussian_space=64):
     result = {"val": val_result}
     return model, result
 
-train_mdnrnn(32, 5, 64, 64)
+train_mdnrnn(32, 3, 64, 5)

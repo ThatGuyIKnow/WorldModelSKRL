@@ -4,7 +4,6 @@ from torchvision import transforms
 from PIL import Image
 
 class Crop(object):
-    """Convert ndarrays in sample to Tensors."""
     def __init__(self, top=0, bottom=-1, left=0, right=-1):
         self.top = top
         self.bottom = bottom
@@ -17,7 +16,7 @@ class Crop(object):
         # numpy image: H x W x C
         # torch image: C x H x W
         return sample[:, self.top:self.bottom, self.left:self.right]
-
+    
 class TransformWrapper(gym.ObservationWrapper):
     transform = transforms.Compose([
             transforms.ToTensor(), 

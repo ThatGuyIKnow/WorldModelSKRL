@@ -192,10 +192,11 @@ class MDNRNN(L.LightningModule):
 
     def _get_losses(self, batch):    
         batch_latent = batch['images']
+        batch_next_latent = batch['next_images']
         batch_actions = batch['actions']
         batch_terminations = batch['dones']
         batch_rewards = batch['rewards']
-        norm_factor = batch_latent[0].shape[-1] + 2 
+        norm_factor = batch_latent[0].shape[-1]
         
         mus, sigmas, logpi, rs, ds, _ = self.forward({"latent": batch_latent, "actions": batch_actions})
         
@@ -203,7 +204,7 @@ class MDNRNN(L.LightningModule):
         unpacked_batch_reward = nn.utils.rnn.unpack_sequence(batch_rewards)
         
         
-        gmm_loss = gaussian_mixture_loss(batch_latent, mus, sigmas, logpi)
+        gmm_loss = gaussian_mixture_loss(batch_next_latent, mus, sigmas, logpi)
         termination_loss = bce_with_logits_list(ds, unpacked_batch_terminations)
         reward_loss = mse_loss_list(rs, unpacked_batch_reward)
 
@@ -243,7 +244,7 @@ class MDNRNN(L.LightningModule):
         loss = (gmm_loss + termination_loss + reward_loss) / (norm_factor + 2)
         
         self.log_dict({
-            'gmm_loss': gmm_loss,
+            'gmm_loss': gmm_loss / norm_factor,
             'termination_loss': termination_loss,
             'reward_loss': reward_loss,
             'loss_scaling': norm_factor + 2,
@@ -259,7 +260,7 @@ class MDNRNN(L.LightningModule):
         loss = (gmm_loss + termination_loss + reward_loss) / (norm_factor + 2)
         
         self.log_dict({
-            'gmm_loss': gmm_loss,
+            'gmm_loss': gmm_loss / norm_factor,
             'termination_loss': termination_loss,
             'reward_loss': reward_loss,
             'loss_scaling': norm_factor + 2,
@@ -273,7 +274,7 @@ class MDNRNN(L.LightningModule):
         loss = (gmm_loss + termination_loss + reward_loss) / (norm_factor + 2)
         
         self.log_dict({
-            'gmm_loss': gmm_loss,
+            'gmm_loss': gmm_loss / norm_factor,
             'termination_loss': termination_loss,
             'reward_loss': reward_loss,
             'loss_scaling': norm_factor + 2,
@@ -282,7 +283,11 @@ class MDNRNN(L.LightningModule):
 
     def on_after_batch_transfer(self, batch, dataloader_idx):
         if self.encoding is not None:
-            packed_images = batch['images']
+            batch['images'] = self._to_latent(batch['images'])
+            batch['next_images'] = self._to_latent(batch['next_images'])
+        return batch
+    
+    def _to_latent(self, packed_images):
             unpacked_images, lengths = torch.nn.utils.rnn.pad_packed_sequence(packed_images, batch_first=True)
             shape = unpacked_images.shape[:2]
 
@@ -295,6 +300,4 @@ class MDNRNN(L.LightningModule):
             packed_encoded_images = torch.nn.utils.rnn.pack_padded_sequence(encoded_images, lengths, batch_first=True)
 
             # Update the batch with the packed encoded images
-            batch['images'] = packed_encoded_images
-
-        return batch
+            return packed_encoded_images

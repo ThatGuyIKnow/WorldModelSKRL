@@ -13,3 +13,4 @@ videos/ALE/
 *.ckpt
 *.tar
 *.pyc
+*.json

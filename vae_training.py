@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -45,6 +46,7 @@ class GenerateCallback(Callback):
                 reconst_imgs, _, _, _ = pl_module(input_imgs)
                 pl_module.train()
             # Plot and add to tensorboard
+            input_imgs = torch.stack(input_imgs)
             imgs = torch.stack([input_imgs, reconst_imgs], dim=1).flatten(0, 1)
             grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True)
             trainer.logger.log_image(key="Reconstructions", images=[grid], step=trainer.global_step)
@@ -65,14 +67,15 @@ def get_car_racing_dataset():
 
     train_loader = DataOnlyLoader(train_loader)
     val_loader = DataOnlyLoader(val_loader)
-    return train_dataset, train_loader, val_loader
+    return val_set, train_loader, val_loader
 
 
 def train_vae(latent_dim=32):
-    train_dataset, train_loader, val_loader = get_car_racing_dataset()
+    val_set, train_loader, val_loader = get_car_racing_dataset()
     # Create a PyTorch Lightning trainer with the generation callback
-    wandb_logger = WandbLogger(log_model="all")
-    training_images = torch.stack([train_dataset[i][0] for i in range(8)], dim=0)
+    wandb_logger = WandbLogger(log_model="all", prefix='vae')
+    idx = np.random.randint(0, len(val_set), size=8)
+    training_images = torch.stack([val_set[i][0] for i in idx], dim=0)
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "vae_%i" % latent_dim),
         accelerator="auto",
@@ -81,9 +84,9 @@ def train_vae(latent_dim=32):
         limit_train_batches=100,
         callbacks=[
             ModelCheckpoint(save_weights_only=True),
-            GenerateCallback(training_images, every_n_epochs=10),
+            GenerateCallback(training_images, every_n_epochs=5),
             LearningRateMonitor("epoch"),
-            EarlyStopping(monitor='train_loss', mode='min', patience=10)
+            EarlyStopping(monitor='val_loss', mode='min', patience=10, check_on_train_epoch_end=False),
         ],
         logger=wandb_logger,
     )

@@ -8,57 +8,27 @@ from skrl.memories.torch import RandomMemory
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
 import torch
-from torchvision.io import read_video
 
-import wandb
-from Models.A2CModel import ActorMLP, CriticMLP
+from Models.AgentModel import ActorMLP, CriticMLP
 
 from Models.WorldModel import WorldModel
 from Models.VAE import VAE
 from Models.MDNRNN import MDNRNN
 from Trainers.WorldModelSequentialTrainer import WorldModelSequentialTrainer
 from Utils.TransformerWrapper import TransformWrapper
-from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+
+from stable_baselines3.common.monitor import Monitor
 
 
-class WandbRecordVideo(gym.wrappers.RecordVideo):
-    def __init__(
-        self,
-        env: gym.Env,
-        video_folder: str,
-        episode_trigger: Callable[[int], bool] = None,
-        step_trigger: Callable[[int], bool] = None,
-        video_length: int = 0,
-        name_prefix: str = "rl-video",
-        disable_logger: bool = False,
-        agent = None
-    ):
-        super().__init__(env, video_folder, episode_trigger, step_trigger, video_length, name_prefix, disable_logger)
-
-        self.agent = agent
-
-    def close_video_recorder(self):
-        if self.recording:
-            clip = np.moveaxis(np.array(self.video_recorder.recorded_frames), -1, 1)
-            clip = np.expand_dims(clip, 0)
-            super().close_video_recorder()
-            self.agent.writer.add_video('Episode', clip, global_step=self.episode_id)
-        else:
-            super().close_video_recorder()
-
-
-    def load_video_as_tensor(self, video_path):
-        video, _, _ = read_video(video_path, pts_unit='sec')
-        video_tensor = video.permute(0, 3, 1, 2).unsqueeze(0)  # Reshape to (batch_size, channels, height, width)
-        return video_tensor
 
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
-env = gym.make("CarRacing-v2", continuous=False, render_mode='rgb_array')
+env = gym.make("CarRacing-v2", render_mode='rgb_array')
+env = Monitor(env)
+env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0)
 env = TransformWrapper(env)
 
 wandb_logger = WandbLogger(log_model="all")
-
 
 # latent z shape + hidden rnn shape
 observation_space = gym.spaces.Box(low = np.zeros(32+64,),  high = np.ones(32+64,),dtype = np.float16)
@@ -73,8 +43,8 @@ policy = ActorMLP(observation_space=observation_space,
              device=device)
 
 
-vae_checkpoint_reference = "team-good-models/model-registry/PretrainedWorldModelVAE:v0"
-mdnrnn_checkpoint_reference = "team-good-models/model-registry/PretrainedMDNRNNWorldModel:v0"
+vae_checkpoint_reference = "team-good-models/model-registry/WorldModelVAE:latest"
+mdnrnn_checkpoint_reference = "team-good-models/model-registry/WorldModelMDNRNN:latest"
 
 vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
 mdnrnn_dir = wandb_logger.download_artifact(mdnrnn_checkpoint_reference, artifact_type="model")
@@ -104,7 +74,7 @@ cfg_agent['vf_coef'] = 0.5
 cfg_agent['rollouts'] = 64
 
 cfg_agent['experiment']['wandb'] = True
-cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model'}
+cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
 
 
 # instantiate a memory as experience replay
@@ -120,7 +90,7 @@ agent = PPO(models=models,
             device=device)
 
 
-env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0, agent=agent)
+# env = WandbRecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0, agent=agent)
 
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 1000000, "headless": True}

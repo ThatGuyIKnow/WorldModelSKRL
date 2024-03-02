@@ -13,6 +13,7 @@ from skrl.trainers.torch import SequentialTrainer
 from skrl.models.torch import Model
 
 
+
 SEQUENTIAL_TRAINER_DEFAULT_CONFIG = {
     "timesteps": 100000,            # number of timesteps to train for
     "headless": False,              # whether to use headless mode (no rendering)
@@ -109,8 +110,8 @@ class WorldModelSequentialTrainer(SequentialTrainer):
             with torch.no_grad():
                 # step the environments
 
-                selected_action = actions.item()
-                next_states, rewards, terminated, truncated, infos = self.env.step(selected_action)
+                selected_action = actions[0]
+                next_states, rewards, terminated, truncated, infos = self.env.step(selected_action.detach().numpy())
                 next_states = torch.Tensor(next_states).to(self.device)
                 rewards = torch.Tensor([rewards]).to(self.device)
                 terminated = torch.Tensor([terminated]).to(self.device)
@@ -153,8 +154,7 @@ class WorldModelSequentialTrainer(SequentialTrainer):
                     
                     actions = self.agents.act(enc_states, timestep=0, timesteps=self.timesteps)[0] 
 
-                    
-                    h_state = self.world_model.step(f.one_hot(actions, self.action_space.n)[0], latent, h_state)
+                    h_state = self.world_model.step(actions, latent, h_state)
                 
                 else:
                     latent = next_latent

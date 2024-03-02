@@ -4,9 +4,12 @@ import pandas as pd
 from PIL import Image
 import torch.nn.functional as F
 import torch.nn as nn
+import ast
+import re
+
 
 class EpisodeDataset(Dataset):
-    def __init__(self, csv_file, transform=None, encoding = None, action_space = None):
+    def __init__(self, csv_file, transform=None, encoding = None, action_space = None, seq_length=16):
         """
         Initializes the dataset.
         
@@ -21,45 +24,59 @@ class EpisodeDataset(Dataset):
         else:
             self.action_space = action_space
         self.encoding = encoding
+        self.seq_length = seq_length
+
     def __len__(self):
-        return len(self.episode_data['Episode'].unique())
+        return len(self.episode_data) // self.seq_length
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        episode_data = self.episode_data[self.episode_data['Episode'] == idx]
+        min_idx = self.seq_length * idx
+        max_idx = min(min_idx + self.seq_length, len(self.episode_data))
+
+        episode_data = self.episode_data[min_idx:max_idx]
         images = []
+        next_images = []
         actions = []
         rewards = []
         dones = []
 
         for _, row in episode_data.iterrows():
             image = Image.open(row['ImagePath'])
+            next_image = Image.open(row['NextImagePath'])
             if self.transform:
                 image = self.transform(image)
+                next_image = self.transform(next_image)
             if self.encoding is not None:
                 _, _, image = self.encoding(image)
+                _, _, next_image = self.encoding(next_image)
                 image = image.squeeze(dim=0).clone().detach()
+                next_image = next_image.squeeze(dim=0).clone().detach()
+            action = row['Action']
+            if isinstance(action, str):
+                action = ast.literal_eval(re.sub(r"\s+", ',', action))
+            
             images.append(image)
-            actions.append(row['Action'])
+            next_images.append(next_image)
+            actions.append(action)
             rewards.append(row['Reward'])
             dones.append(row['Done'])
 
         actions = torch.tensor(actions, dtype=torch.long)
 
         images = torch.stack(images)
-        actions = F.one_hot(actions, self.action_space).float() 
+        next_images = torch.stack(next_images)
+        if actions.shape[-1] == 1:
+            actions = F.one_hot(actions, self.action_space).float() 
+        else:
+            actions = actions.float()
         rewards =  torch.tensor(rewards, dtype=torch.float)
         dones = torch.tensor(dones, dtype=torch.float)
-        
-        images.requires_grad = True
-        actions.requires_grad = True
-        rewards.requires_grad = True
-        dones.requires_grad = True
-        
 
         sample = {'images': images, 
+                  'next_images': next_images, 
                   'actions': actions, 
                   'rewards': rewards,
                   'dones': dones}
@@ -83,7 +100,7 @@ class EpisodeDataset(Dataset):
         seq_lengths = seq_lengths[order_indicies]
 
 
-        keys = ['images', 'actions', 'rewards', 'dones']
+        keys = ['images', 'next_images', 'actions', 'rewards', 'dones']
         batch = {key : [sample[key] for sample in batch] for key in keys}
         coll_batch = {key : EpisodeDataset.collate_key(batch[key], seq_lengths, order_indicies) for key in keys}
         return coll_batch
