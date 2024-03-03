@@ -8,9 +8,10 @@ data/
 artifacts/
 videos/
 wandb/
-videos/ALE/
+videos/
 *.mp4
 *.ckpt
 *.tar
 *.pyc
 *.json
+*.mp4

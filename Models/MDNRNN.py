@@ -89,6 +89,7 @@ class MDNRNN(L.LightningModule):
                  lookahead: int = 1,
                  temperature: float = 0.2,
                  encoding = None,
+                 include_reward_loss = False,
                  device: Union[str, torch.device] = 'cuda'):
         super().__init__()
 
@@ -110,6 +111,8 @@ class MDNRNN(L.LightningModule):
         self.cell = MDRNNCell(self.latent_space, self.action_space, self.h_space, self.gaussian_space)
 
         self.encoding = encoding
+
+        self.include_reward_loss = include_reward_loss
 
     @property
     def rnn_space(self):
@@ -190,7 +193,7 @@ class MDNRNN(L.LightningModule):
         scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
-    def _get_losses(self, batch):    
+    def _get_losses(self, batch, include_reward = False):    
         batch_latent = batch['images']
         batch_next_latent = batch['next_images']
         batch_actions = batch['actions']
@@ -206,7 +209,11 @@ class MDNRNN(L.LightningModule):
         
         gmm_loss = gaussian_mixture_loss(batch_next_latent, mus, sigmas, logpi)
         termination_loss = bce_with_logits_list(ds, unpacked_batch_terminations)
-        reward_loss = mse_loss_list(rs, unpacked_batch_reward)
+        
+        if include_reward:
+            reward_loss = mse_loss_list(rs, unpacked_batch_reward)
+        else:
+            reward_loss = 0
 
         return gmm_loss, termination_loss, reward_loss, norm_factor        
 
@@ -239,10 +246,13 @@ class MDNRNN(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         batch = { key : self.set_requires_grad_for_packed_sequence(value) for key, value in batch.items()}
-        gmm_loss, termination_loss, reward_loss, norm_factor = self._get_losses(batch)
+        gmm_loss, termination_loss, reward_loss, norm_factor = self._get_losses(batch, self.include_reward_loss)
         
-        loss = (gmm_loss + termination_loss + reward_loss) / (norm_factor + 2)
-        
+        if self.include_reward_loss:
+            loss = (gmm_loss + termination_loss + reward_loss) / (norm_factor + 2)
+        else:
+            loss = (gmm_loss + termination_loss) / (norm_factor + 1)
+
         self.log_dict({
             'gmm_loss': gmm_loss / norm_factor,
             'termination_loss': termination_loss,

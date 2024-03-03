@@ -28,7 +28,7 @@ SEED = 42
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 BATCH_SIZE = 16
 NUM_WORKERS = 4
-MAX_EPOCHS = 500
+MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 30
 
 # Model parameters

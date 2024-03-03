@@ -23,7 +23,7 @@ class TransformWrapper(gym.ObservationWrapper):
             transforms.Grayscale(), 
             transforms.Normalize((0.5,), (0.5,)), 
             Crop(bottom=-50),
-            transforms.Resize((64, 64)),
+            transforms.Resize((64, 64), antialias=True),
         ])
     def __init__(self, env):
         super().__init__(env)

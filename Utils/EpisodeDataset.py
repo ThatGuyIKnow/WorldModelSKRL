@@ -26,15 +26,19 @@ class EpisodeDataset(Dataset):
         self.encoding = encoding
         self.seq_length = seq_length
 
+        # Drop last SEQ length to ensure equal length training data
+        allowed = self.episode_data.groupby(['Episode', 'Worker'], as_index=False).apply(lambda x: x.iloc[:-seq_length])
+        self.allowed_idx = [idx[1] for idx in allowed.index]
+
     def __len__(self):
-        return len(self.episode_data) // self.seq_length
+        return len(self.allowed_idx) // self.seq_length
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        min_idx = self.seq_length * idx
-        max_idx = min(min_idx + self.seq_length, len(self.episode_data))
+        min_idx = self.allowed_idx[self.seq_length * idx]
+        max_idx = min_idx + self.seq_length
 
         episode_data = self.episode_data[min_idx:max_idx]
         images = []

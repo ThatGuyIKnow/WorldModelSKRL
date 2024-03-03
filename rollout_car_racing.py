@@ -6,7 +6,7 @@ import csv
 from tqdm import tqdm
 import multiprocessing
 
-def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_length=50, env_kwargs={}, repeat_action=200, frame_skip=4, skip_first=0):
+def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_length=50, env_kwargs={}, repeat_action=1, frame_skip=4, skip_first=0):
     """
     Worker function to simulate a gym environment for a specified number of steps, save each frame as an image, 
     and record details (reward, done, action, image paths) in a CSV file.
@@ -26,7 +26,7 @@ def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_len
     csv_file_path = os.path.join(output_folder, 'details_simulation.csv')
     with open(csv_file_path, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Episode', 'Step', 'Action', 'Reward', 'Done', 'Truncated', 'ImagePath', 'NextImagePath'])
+        writer.writerow(['Episode', 'Step', 'Action', 'Reward', 'Done', 'Truncated', 'ImagePath', 'NextImagePath', 'Worker'])
 
     step_count = 0
     episode = 0
@@ -44,15 +44,14 @@ def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_len
         action = env.action_space.sample()
         for step in range(total_steps):
 
+            if step % repeat_action == 0:
+                action = env.action_space.sample()
             if step % frame_skip == 0:
                 # Render the environment to a numpy array and save as an image
                 frame = env.render()
                 img_path = os.path.join(output_folder, f'episode_{episode}_step_{step}.png')
                 Image.fromarray(frame).save(img_path)
 
-                if step % repeat_action != 0:
-                    action = env.action_space.sample()
-            
                 observation, reward, done, truncated, info = env.step(action)
             
                 truncated |= eps_length > max_eps_length
@@ -63,7 +62,7 @@ def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_len
                 # Write details to CSV
                 with open(csv_file_path, 'a', newline='') as file:
                     writer = csv.writer(file)
-                    writer.writerow([episode, step, action, reward, done, truncated, img_path, next_img_path])
+                    writer.writerow([episode, step, action, reward, done, truncated, img_path, next_img_path, worker_id])
 
                 last_img_path = img_path
                 step_count += 1
@@ -75,9 +74,6 @@ def run_worker(env_name, worker_id, output_folder, total_steps=1000, max_eps_len
                     Image.fromarray(frame).save(next_img_path)
                     break
             else:
-                if step % repeat_action != 0:
-                    action = env.action_space.sample()
-            
                 observation, reward, done, truncated, info = env.step(action)
             
                 truncated |= eps_length > max_eps_length
@@ -116,7 +112,7 @@ def collate_csv(output_folder, num_workers):
     main_csv_file_path = os.path.join(output_folder, 'main_details_simulation.csv')
     with open(main_csv_file_path, 'w', newline='') as main_file:
         writer = csv.writer(main_file)
-        writer.writerow(['Episode', 'Step', 'Action', 'Reward', 'Done', 'Truncated', 'ImagePath', 'NextImagePath'])
+        writer.writerow(['Episode', 'Step', 'Action', 'Reward', 'Done', 'Truncated', 'ImagePath', 'NextImagePath', 'Worker'])
         for i in range(num_workers):
             worker_csv_file_path = os.path.join(output_folder, f'worker_{i}', 'details_simulation.csv')
             with open(worker_csv_file_path, 'r') as worker_file:
@@ -130,9 +126,10 @@ run_workers(
     num_workers=8, 
     env_name='CarRacing-v2', 
     output_folder='./data/carracing-v2', 
-    total_steps=10000, 
+    total_steps=int(1e6/8), 
     max_eps_length=1000, 
-    skip_first=15,
+    skip_first=50,
+    repeat_action=200,
     frame_skip=4
 )
 collate_csv('./data/carracing-v2', num_workers=8)

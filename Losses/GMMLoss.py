@@ -11,17 +11,10 @@ def reduction_losses(losses, reduction):
     return losses
 
 
-def gaussian_mixture_loss(batch, mus, sigmas, logpi, reduction = 'mean'):
+def gaussian_mixture_loss(batch, mus, sigmas, logpi):
 
     if isinstance(batch, nn.utils.rnn.PackedSequence):
         batch = nn.utils.rnn.unpack_sequence(batch)
-
-    #losses = [_gaussian_mixture_loss(*v) for v in zip(batch, mus, sigmas, logpi)]
-    losses = _gaussian_mixture_loss(batch, mus, sigmas, logpi)
-    
-    return losses
-
-def _gaussian_mixture_loss(batch, mus, sigmas, logpi):
 
     if isinstance(batch, list) or isinstance(batch, tuple):
         batch = torch.stack(batch)    
@@ -32,6 +25,13 @@ def _gaussian_mixture_loss(batch, mus, sigmas, logpi):
     if isinstance(logpi, list) or isinstance(logpi, tuple):
         logpi = torch.stack(logpi)    
     
+
+    #losses = [_gaussian_mixture_loss(*v) for v in zip(batch, mus, sigmas, logpi)]
+    losses = _gaussian_mixture_loss(batch, mus, sigmas, logpi)
+    
+    return losses
+
+def _gaussian_mixture_loss(batch, mus, sigmas, logpi):
     
     batch = batch.swapaxes(0, 1)
     mus = mus.swapaxes(0, 1)
