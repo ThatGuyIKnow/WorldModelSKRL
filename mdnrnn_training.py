@@ -30,6 +30,7 @@ BATCH_SIZE = 16
 NUM_WORKERS = 4
 MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 30
+VAL_SPLIT = 0.1
 
 # Model parameters
 ACTION_SPACE = 3
@@ -54,6 +55,7 @@ print("Device:", DEVICE)
 wandb_logger = WandbLogger(**WANDB_KWARGS)
 vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
 encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
+encoding_model.freeze()
 
 transform = TransformWrapper.transform
 
@@ -100,7 +102,7 @@ class GenerateCallback(L.Callback):
 
 def get_car_racing_dataset():
     train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH)    
-    train_set, val_set = torch.utils.data.random_split(train_dataset, [0.9, 0.1])
+    train_set, val_set = torch.utils.data.random_split(train_dataset, [1-VAL_SPLIT, VAL_SPLIT])
 
     train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)
     val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)

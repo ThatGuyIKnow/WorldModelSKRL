@@ -33,6 +33,8 @@ mdnrnn_dir = wandb_logger.download_artifact(mdnrnn_checkpoint_reference, artifac
 vae = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
 mdnrnn = MDNRNN.load_from_checkpoint(Path(mdnrnn_dir) / "model.ckpt", strict=False)
 
+vae.freeze()
+mdnrnn.freeze()
 
 # Create the environment
 env = gym.make("CarRacing-v2", render_mode='rgb_array')

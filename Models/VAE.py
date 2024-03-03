@@ -48,6 +48,8 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
         self.fc_mu = nn.Linear(2*2*256, latent_size)
         self.fc_logsigma = nn.Linear(2*2*256, latent_size)
+
+        nn.init.zeros_(self.fc_logsigma.weight)
     
 
     def forward(self, x): # pylint: disable=arguments-differ
@@ -82,13 +84,6 @@ class VAE(L.LightningModule):
         self.encoder = Encoder(img_channels, latent_size)
         self.decoder = Decoder(img_channels, latent_size)
 
-    def forward(self, x): # pylint: disable=arguments-differ
-        #x = x.view(-2, self.img_channels, *self.observation_space)
-        mu, logsigma, z = self.encoder(x)
-
-        recon_x = self.decoder(z)
-        return recon_x, mu, logsigma, z
-
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters())
@@ -96,13 +91,32 @@ class VAE(L.LightningModule):
         # The scheduler reduces the LR if the validation performance hasn't improved for the last N epochs
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+    
 
+    # ============================================
+    # ================= FORWARD ==================
+    # ============================================
+    def forward(self, x): # pylint: disable=arguments-differ
+        #x = x.view(-2, self.img_channels, *self.observation_space)
+        mu, logsigma, z = self.encoder(x)
+
+        recon_x = self.decoder(z)
+        return recon_x, mu, logsigma, z
+
+
+    # ============================================
+    # ================== LOSSES ==================
+    # ============================================
     def _get_reconstruction_loss(self, batch, recon_x):
         return F.mse_loss(recon_x, batch, reduction='sum')
     
     def _get_regularization_loss(self, logsigma, mu):
         return -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
+    
 
+    # ============================================
+    # ============== STEP FUNCTIONS ==============
+    # ============================================
     def training_step(self, batch, batch_idx):
         recon_x, mu, logsigma, _ = self.forward(batch)
         
@@ -143,21 +157,3 @@ class VAE(L.LightningModule):
         self.log("test_reg_loss", reg_loss)
         return loss
     
-    def get_as_transform(self):
-        return VAE.VAETransform(self.encoder)
-    
-    class VAETransform(object):
-        """Rescale the image in a sample to a given size.
-
-        Args:
-            output_size (tuple or int): Desired output size. If tuple, output is
-                matched to output_size. If int, smaller of image edges is matched
-                to output_size keeping aspect ratio the same.
-        """
-        def __init__(self, encoder) -> None:
-            self.encoder = encoder
-
-        def __call__(self, sample):
-            _, _, z = self.encoder(sample)
-                
-            return z.view(-1).clone().detach()
