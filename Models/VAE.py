@@ -124,9 +124,9 @@ class VAE(L.LightningModule):
         reg_loss = self._get_regularization_loss(logsigma, mu)
         loss = recon_loss + reg_loss
 
-        self.log("train_loss", loss)
-        self.log("recon_loss", recon_loss)
-        self.log("reg_loss", reg_loss)
+        self.log("val_loss", loss)
+        self.log("val_recon_loss", recon_loss)
+        self.log("val_reg_loss", reg_loss)
 
         return {'val_loss': loss}
 
@@ -138,9 +138,9 @@ class VAE(L.LightningModule):
         reg_loss = self._get_regularization_loss(logsigma, mu)
         loss = recon_loss + reg_loss
 
-        self.log("train_loss", loss)
-        self.log("recon_loss", recon_loss)
-        self.log("reg_loss", reg_loss)
+        self.log("test_loss", loss)
+        self.log("test_recon_loss", recon_loss)
+        self.log("test_reg_loss", reg_loss)
         return loss
     
     def get_as_transform(self):
