@@ -46,9 +46,8 @@ class GenerateCallback(Callback):
                 reconst_imgs, _, _, _ = pl_module(input_imgs)
                 pl_module.train()
             # Plot and add to tensorboard
-            input_imgs = torch.stack(input_imgs)
-            imgs = torch.stack([input_imgs, reconst_imgs], dim=1).flatten(0, 1)
-            grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True)
+            imgs = torch.concat([input_imgs, reconst_imgs], dim=-2)
+            grid = torch.concat([img for img in imgs], dim=-1)
             trainer.logger.log_image(key="Reconstructions", images=[grid], step=trainer.global_step)
 
 
@@ -81,7 +80,6 @@ def train_vae(latent_dim=32):
         accelerator="auto",
         devices=1,
         max_epochs=100,
-        limit_train_batches=100,
         callbacks=[
             ModelCheckpoint(save_weights_only=True),
             GenerateCallback(training_images, every_n_epochs=5),
