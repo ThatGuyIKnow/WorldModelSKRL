@@ -148,4 +148,6 @@ def train_mdnrnn():
     result = {"val": val_result}
     return model, result
 
-train_mdnrnn()
+
+if __name__ == '__main__':
+    train_mdnrnn()
