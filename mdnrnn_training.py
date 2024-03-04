@@ -101,7 +101,7 @@ def get_car_racing_dataset():
     return train_loader, val_loader
 
 def get_seq_input_imgs(n=8):
-    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder)
+    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder, limit_size=100, device=DEVICE)
     idx = np.random.randint(0, len(dataset), size=n)
     values = transpose_2d([dataset[i] for i in idx])
     values = [torch.stack(v) for v in values]

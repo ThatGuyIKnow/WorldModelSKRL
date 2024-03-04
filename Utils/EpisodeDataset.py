@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 
 class EpisodeDataset(Dataset):
-    def __init__(self, csv_file, transform=None, encoder = None, action_space = None, seq_length=16, device='cpu'):
+    def __init__(self, csv_file, transform=None, encoder = None, action_space = None, seq_length=16, device='cpu', limit_size=None):
         """
         Initializes the dataset.
         
@@ -19,7 +19,11 @@ class EpisodeDataset(Dataset):
         csv_file (str): Path to the CSV file containing episode data.
         transform (callable, optional): Optional transform to be applied on a sample.
         """
-        self.episode_data = pd.read_csv(csv_file)[:1000]
+        if limit_size is None:
+            self.episode_data = pd.read_csv(csv_file)
+        else:
+            self.episode_data = pd.read_csv(csv_file)[:limit_size]
+            
         self.episode_data['Action'] = self.episode_data['Action'].apply(lambda x: ast.literal_eval(re.sub(r"\s+", ',', x)))
         self.encoder = encoder.to(device)
 
