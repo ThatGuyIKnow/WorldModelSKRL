@@ -53,13 +53,13 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 print("Device:", DEVICE)
+if __name__ == '__main__':
+    wandb_logger = WandbLogger(**WANDB_KWARGS)
+    vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
+    encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
+    encoding_model.freeze()
 
-wandb_logger = WandbLogger(**WANDB_KWARGS)
-vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
-encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
-encoding_model.freeze()
-
-transform = TransformWrapper.transform
+    transform = TransformWrapper.transform
 
 class GenerateCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
