@@ -1,9 +1,9 @@
 from typing import Optional, Tuple
 import torch
 import torch.nn as nn
-from torch import jit
 from torch.optim import RMSprop
 from torch.distributions import (Normal as Gaussian, Categorical, MixtureSameFamily, Independent)
+import torch.nn.functional as F
 
 import lightning as L
 from Losses.GMMLoss import bce_with_logits_list, gaussian_mixture_loss, mse_loss_list
@@ -11,62 +11,55 @@ from Losses.GMMLoss import bce_with_logits_list, gaussian_mixture_loss, mse_loss
 from Utils.ReduceLROnPlateau import ReduceLROnPlateau
 from Utils.utils import prefix_keys, transpose_2d
 
-
-class MDNRNNCell(jit.ScriptModule):
-    def __init__(self, latents, actions, gaussians, hidden_size):
+class MDRNNCell_(nn.Module):
+    def __init__(self, latents, actions, hiddens, gaussians):
         super().__init__()
-        self.hidden_size = hidden_size
         self.latents = latents
         self.actions = actions
+        self.hiddens = hiddens
         self.gaussians = gaussians
+
+        self.gmm_linear = nn.Linear(
+            hiddens, (2 * latents + 1) * gaussians + 2)
+        
+        self.rnn = nn.LSTMCell(latents + actions, hiddens)
 
         stride = self.gaussians * self.latents
         self.splits = [stride, stride, gaussians, 1, 1]
 
-        self.weight_ih = nn.Parameter(torch.randn(4 * hidden_size, self.latents + self.actions))
-        self.weight_hh = nn.Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = nn.Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = nn.Parameter(torch.randn(4 * hidden_size))
+    def forward(self, input, hidden): # pylint: disable=arguments-differ
+        """ ONE STEP forward.
 
-        output_size = (2 * latents + 1) * gaussians + 2
-        self.gmm = nn.Parameter(torch.randn(output_size, hidden_size))
-        self.bias_gmm = nn.Parameter(torch.randn(output_size))
+        :args actions: (BSIZE, ASIZE) torch tensor
+        :args latents: (BSIZE, LSIZE) torch tensor
+        :args hidden: (BSIZE, RSIZE) torch tensor
 
+        :returns: mu_nlat, sig_nlat, pi_nlat, r, d, next_hidden, parameters of
+        the GMM prediction for the next latent, gaussian prediction of the
+        reward, logit prediction of terminality and next hidden state.
+            - mu_nlat: (BSIZE, N_GAUSS, LSIZE) torch tensor
+            - sigma_nlat: (BSIZE, N_GAUSS, LSIZE) torch tensor
+            - logpi_nlat: (BSIZE, N_GAUSS) torch tensor
+            - rs: (BSIZE) torch tensor
+            - ds: (BSIZE) torch tensor
+        """
+        #in_al = in_al.view(*in_al.shape[1:])
 
-    @jit.script_method
-    def forward(
-        self, input: torch.Tensor, state: Tuple[torch.Tensor, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        hx, cx = state
-        gates = (
-            torch.mm(input, self.weight_ih.t())
-            + self.bias_ih
-            + torch.mm(hx, self.weight_hh.t())
-            + self.bias_hh
-        )
-        ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+        next_hidden = self.rnn(input, hidden)
+        out_rnn = next_hidden[0]
 
-        ingate = torch.sigmoid(ingate)
-        forgetgate = torch.sigmoid(forgetgate)
-        cellgate = torch.tanh(cellgate)
-        outgate = torch.sigmoid(outgate)
+        out_full = self.gmm_linear(out_rnn)
 
-        cy = (forgetgate * cx) + (ingate * cellgate)
-        hy = outgate * torch.tanh(cy)
-        
-        zy = torch.mm(hy, self.gmm.t()) + self.bias_gmm
-        mus, sigmas, logpi, r, d = torch.split(zy, self.splits, dim=1)
+        mus, sigmas, pi, r, d = torch.split(out_full, self.splits, dim=1)
 
         mus = mus.view(-1, self.gaussians, self.latents)
-        sigmas = mus.view(-1, self.gaussians, self.latents)
-        logpi = logpi.view(-1, self.gaussians)
-        
+        sigmas = sigmas.view(-1, self.gaussians, self.latents)
+        pi = pi.view(-1, self.gaussians)
+
         sigmas = torch.exp(sigmas)
-        logpi = torch.log_softmax(logpi, dim=-1)
+        logpi = F.log_softmax(pi, dim=-1)
 
-        return mus, sigmas, logpi, r, d, (hy, cy)
-
-
+        return mus, sigmas, logpi, r, d, next_hidden
 
 
 class MDNRNN(L.LightningModule):
@@ -82,7 +75,8 @@ class MDNRNN(L.LightningModule):
         self.latent_space = latent_space
         self.hidden_space = hidden_space
         if cell is None:
-            self.cell = MDNRNNCell(latent_space, action_space, gaussian_space, hidden_space)
+            #self.cell = MDRNNCell_(latent_space, action_space, gaussian_space, hidden_space)
+            self.cell = MDRNNCell_(latent_space, action_space, hidden_space, gaussian_space)
         else:
             self.cell = cell
 
@@ -136,8 +130,7 @@ class MDNRNN(L.LightningModule):
         return mus, sigmas, logpis, rs, ds, hidden
 
     def initial_state(self, batch_size: int = 1) -> Tuple[torch.Tensor, torch.Tensor]:
-        hidden_space = self.hidden_space
-        return torch.zeros((batch_size, hidden_space), device=self.device), torch.zeros((batch_size, hidden_space), device=self.device)
+        return torch.zeros((batch_size, self.hidden_space), device=self.device), torch.zeros((batch_size, self.hidden_space), device=self.device)
 
     def sample(self, mus, sigmas, logpi):
         cat = Categorical(logpi)
