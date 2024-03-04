@@ -25,7 +25,7 @@ class EpisodeDataset(Dataset):
 
         self.image_paths = pd.concat([self.episode_data['ImagePath'], self.episode_data['NextImagePath']]).unique()
         self.image_idx = pd.Series(range(len(self.image_paths)), index=self.image_paths)
-        self.images = torch.stack([transform(Image.open(path)) for path in tqdm(image_paths)]).to(device)
+        self.images = torch.stack([transform(Image.open(path)) for path in tqdm(self.image_paths)]).to(device)
         _, _, self.images = encoder(self.images)
 
         self.actions = self.episode_data['Action'].apply(torch.tensor, by_row=False).to(device)
