@@ -3,6 +3,7 @@
 Variational encoder model, used as a visual model
 for our model of the world.
 """
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -77,7 +78,7 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
 class VAE(L.LightningModule):
     """ Variational Autoencoder """
-    def __init__(self, img_channels, latent_size):
+    def __init__(self, img_channels, latent_size, reg_clip = 8.):
         super(VAE, self).__init__()
         self.save_hyperparameters()
 
@@ -87,7 +88,8 @@ class VAE(L.LightningModule):
 
         self.has_nan_loss = False
 
-    
+        self.reg_clip = reg_clip
+
     def configure_optimizers(self):
         optimizer = Adam(self.parameters())
         # Using a scheduler is optional but can be helpful.
