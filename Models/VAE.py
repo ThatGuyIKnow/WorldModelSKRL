@@ -70,7 +70,7 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         return mu, logsigma, z
     
     def sample_z(self, mu, logsigma):
-        sigma = logsigma.exp()
+        sigma = (0.5 * logsigma).exp()
         eps = torch.randn_like(sigma)
         return eps.mul(sigma).add_(mu)
 
@@ -92,7 +92,7 @@ class VAE(L.LightningModule):
         optimizer = Adam(self.parameters())
         # Using a scheduler is optional but can be helpful.
         # The scheduler reduces the LR if the validation performance hasn't improved for the last N epochs
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5, threshold=0.02)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
 
@@ -114,7 +114,7 @@ class VAE(L.LightningModule):
         return F.mse_loss(recon_x, batch, reduction='sum')
     
     def _get_regularization_loss(self, logsigma, mu):
-        return -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
+        return torch.mean(-0.5 * torch.sum(1 + logsigma - mu.pow(2) - logsigma.exp(),dim=1),dim=0)
     
 
     # ============================================

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 
 import lightning as L
@@ -128,7 +129,11 @@ def train_vae():
         print("Found pretrained model, loading...")
         model = VAE.load_from_checkpoint(pretrained_filename)
     else:
-        model = VAE(IMG_CHANNELS, LATENT_DIM)
+
+        vae_checkpoint_reference = "team-good-models/lightning_logs/model-fe6xxfhz:v33"
+        vae_dir = wandb_logger.download_artifact(vae_checkpoint_reference, artifact_type="model")
+        model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt")
+        #model = VAE(IMG_CHANNELS, LATENT_DIM)
         trainer.fit(model, train_loader, val_loader)
     
     # Test best model on validation and test set
