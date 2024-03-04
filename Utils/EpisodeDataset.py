@@ -66,8 +66,10 @@ class EpisodeDataset(Dataset):
         dones = []
 
         for i, row in episode_data.iterrows():
-            image = self.images[self.image_idx[row['ImagePath']]]
-            next_image = self.images[self.image_idx[row['NextImagePath']]]           
+            path = self.image_idx[row['ImagePath']]
+            next_path = self.image_idx[row['NextImagePath']]
+            image = self.images[path]
+            next_image = self.images[next_image]           
             images.append(image)
             next_images.append(next_image)
 
