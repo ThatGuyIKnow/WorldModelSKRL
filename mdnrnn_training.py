@@ -65,22 +65,12 @@ class GenerateCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
         super().__init__()
         self.action_shape = action_shape
-        
-        self.encoder = vae.encoder.to(DEVICE)
         self.decoder = vae.decoder.to(DEVICE)
-        images, actions, _, _, next_images = input_imgs
-        self.input_actions = torch.stack(actions).to(DEVICE)
-        self.input_imgs = torch.stack([img[-1] for img in next_images]).unsqueeze(dim=1).to(DEVICE)
-        self.sample_count = len(self.input_imgs)
-
-        self.input_latent = torch.stack([self._to_latent(img.to(DEVICE)) for img in images])  # Latents to reconstruct during training
-        
-        self.image_reconst = self.decoder(self.input_latent[:, -1])
+        latent, actions, _, _, next_latent = input_imgs
+        self.input_latent = latent
+        self.input_actions = actions
+        self.image_reconst = self.decoder(next_latent[:, -1])
         self.every_n_epochs = every_n_epochs
-
-    def _to_latent(self, image):
-        _, _, latent = self.encoder(image)
-        return latent.squeeze(dim=0).clone().detach()
 
     def on_train_epoch_end(self, trainer, pl_module):
         if trainer.current_epoch % self.every_n_epochs == 0:
@@ -97,7 +87,7 @@ class GenerateCallback(L.Callback):
                 reconst_imgs = self.decoder(next_latents)
                 pl_module.train()
 
-            imgs = torch.stack([self.input_imgs[:, -1], self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
+            imgs = torch.stack([self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
             grid = torchvision.utils.make_grid(imgs, nrow=3, normalize=True)
             trainer.logger.log_image(key="Reconstructions_Next_Step", images=[grid], step=trainer.global_step)
 
@@ -113,19 +103,20 @@ def get_car_racing_dataset():
 def get_seq_input_imgs(n=8):
     dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder)
     idx = np.random.randint(0, len(dataset), size=n)
-    images = [Image.open(dataset.image_paths[i]) for i in idx]
-    return images, torch.stack([dataset[i] for i in idx]).T
+    values = transpose_2d([dataset[i] for i in idx])
+    values = [torch.stack(v) for v in values]
+    return values
 
 def train_mdnrnn():
     train_loader, val_loader = get_car_racing_dataset()
-    images, input_seqs = get_seq_input_imgs()
+    input_seqs = get_seq_input_imgs()
 
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % LATENT_DIM),
         devices=1,
         max_epochs=MAX_EPOCHS,
         callbacks=[
-            GenerateCallback(images, input_seqs, encoding_model, ACTION_SPACE, 1),
+            GenerateCallback(input_seqs, encoding_model, ACTION_SPACE, 1),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
             EarlyStopping(monitor='val_loss', mode='min', patience=EARLY_STOPPING_PATIENCE, check_on_train_epoch_end=False)
