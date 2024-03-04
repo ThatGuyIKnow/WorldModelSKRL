@@ -3,6 +3,7 @@
 Variational encoder model, used as a visual model
 for our model of the world.
 """
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,7 +37,7 @@ class Decoder(nn.Module):
 
 class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
     """ VAE encoder """
-    def __init__(self, img_channels, latent_size):
+    def __init__(self, img_channels, latent_size, reg_clip=torch.inf):
         super(Encoder, self).__init__()
         self.latent_size = latent_size
         #self.img_size = img_size
@@ -51,7 +52,7 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         self.fc_logsigma = nn.Linear(2*2*256, latent_size)
 
         nn.init.zeros_(self.fc_logsigma.weight)
-    
+        self.reg_clip = reg_clip
 
     def forward(self, x): # pylint: disable=arguments-differ
         if len(x.shape) == 3:
@@ -77,7 +78,7 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
 class VAE(L.LightningModule):
     """ Variational Autoencoder """
-    def __init__(self, img_channels, latent_size):
+    def __init__(self, img_channels, latent_size, reg_clip=8.):
         super(VAE, self).__init__()
         self.save_hyperparameters()
 
@@ -86,7 +87,7 @@ class VAE(L.LightningModule):
         self.decoder = Decoder(img_channels, latent_size)
 
         self.has_nan_loss = False
-
+        self.reg_clip = reg_clip
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters())
@@ -114,7 +115,9 @@ class VAE(L.LightningModule):
         return F.mse_loss(recon_x, batch, reduction='sum')
     
     def _get_regularization_loss(self, logsigma, mu):
-        return torch.mean(-0.5 * torch.sum(1 + logsigma - mu.pow(2) - logsigma.exp(),dim=1),dim=0)
+        sigma = logsigma.exp()
+        sigma = torch.nan_to_num(sigma, 0, neginf=0, posinf=math.exp(self.reg_clip))
+        return torch.mean(-0.5 * torch.sum(1 + logsigma - mu.pow(2) - sigma, dim=1),dim=0)
     
 
     # ============================================
@@ -130,6 +133,8 @@ class VAE(L.LightningModule):
         self.log("train_loss", loss)
         self.log("recon_loss", recon_loss)
         self.log("reg_loss", reg_loss)
+        self.log("max_latent_mean (mu)", mu.abs().max())
+        self.log("max_latent_std (logsigma)", logsigma.max())
 
         if not self.has_nan_loss and torch.isnan(loss) and wandb.run is not None:
             wandb.alert('NaN Loss', text='NaN loss occurred!')
