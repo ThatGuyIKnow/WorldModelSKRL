@@ -23,8 +23,7 @@ CHECKPOINT_PATH = 'runs'
 
 # Training parameters
 SEED = 42
-#DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-DEVICE = 'cuda:0'
+DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 BATCH_SIZE = 16
 NUM_WORKERS = 4
 MAX_EPOCHS = 30
@@ -104,6 +103,7 @@ class GenerateCallback(L.Callback):
 
 def get_car_racing_dataset():
     train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder, device=DEVICE)
+    train_dataset.train_data.to(DEVICE)
     train_set, val_set = torch.utils.data.random_split(train_dataset, [1-VAL_SPLIT, VAL_SPLIT])
 
     train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS)
