@@ -42,7 +42,6 @@ class EnsureType(object):
 class TransformWrapper(gym.ObservationWrapper):
     transform = transforms.Compose([
             transforms.ToTensor(), 
-            Interpolate(0, 255, -1, 1),
             transforms.Grayscale(), 
             Crop(bottom=-50),
             transforms.Resize((64, 64), antialias=True),
