@@ -25,7 +25,7 @@ CHECKPOINT_PATH = 'runs'
 SEED = 42
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 BATCH_SIZE = 16
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 30
 VAL_SPLIT = 0.1
@@ -52,14 +52,14 @@ L.seed_everything(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+transform = TransformWrapper.transform
+
 print("Device:", DEVICE)
 if __name__ == '__main__':
     wandb_logger = WandbLogger(**WANDB_KWARGS)
     vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
     encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
     encoding_model.freeze()
-
-    transform = TransformWrapper.transform
 
 class GenerateCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
@@ -105,7 +105,7 @@ def get_car_racing_dataset():
     train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder, device=DEVICE)
     train_set, val_set = torch.utils.data.random_split(train_dataset, [1-VAL_SPLIT, VAL_SPLIT])
 
-    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS, multiprocessing_context='spawn')
+    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, num_workers=NUM_WORKERS, multiprocessing_context='spawn')
     val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS, multiprocessing_context='spawn')
 
     return train_loader, val_loader
