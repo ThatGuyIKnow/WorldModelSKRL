@@ -23,10 +23,15 @@ class Crop(object):
 
 class Interpolate(object):
     def __init__(self, min_v, max_v, target_min_v, target_max_v) -> None:
-        self.interp = partial(np.interp, xp=[min_v, max_v], fp=[target_min_v, target_max_v])
+        self.min_v = min_v
+        self.factor = max_v - min_v
+
+        self.scale_factor = target_max_v - target_min_v
+        self.target_min_v = target_min_v
 
     def __call__(self, sample):
-        return self.interp( sample )
+        p = (sample - self.min_v) / self.factor
+        return self.scale_factor * p + self.target_min_v
     
 class EnsureType(object):
     def __init__(self, type) -> None:
@@ -36,12 +41,11 @@ class EnsureType(object):
 
 class TransformWrapper(gym.ObservationWrapper):
     transform = transforms.Compose([
-            Interpolate(0, 255, -1, 1),
             transforms.ToTensor(), 
+            Interpolate(0, 255, -1, 1),
             transforms.Grayscale(), 
             Crop(bottom=-50),
             transforms.Resize((64, 64), antialias=True),
-            EnsureType(torch.float)
         ])
     def __init__(self, env):
         super().__init__(env)

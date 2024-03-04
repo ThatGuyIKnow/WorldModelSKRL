@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam, lr_scheduler
 import lightning as L
+import wandb
 
 class Decoder(nn.Module):
     """ VAE decoder """
@@ -84,6 +85,8 @@ class VAE(L.LightningModule):
         self.encoder = Encoder(img_channels, latent_size)
         self.decoder = Decoder(img_channels, latent_size)
 
+        self.has_nan_loss = False
+
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters())
@@ -127,7 +130,9 @@ class VAE(L.LightningModule):
         self.log("train_loss", loss)
         self.log("recon_loss", recon_loss)
         self.log("reg_loss", reg_loss)
-        
+
+        if not self.has_nan_loss and torch.isnan(loss) and wandb.run is not None:
+            wandb.alert('NaN Loss', text='NaN loss occurred!')
         return loss
 
 
