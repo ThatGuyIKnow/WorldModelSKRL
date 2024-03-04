@@ -23,7 +23,8 @@ CHECKPOINT_PATH = 'runs'
 
 # Training parameters
 SEED = 42
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+#DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+DEVICE = 'cuda:0'
 BATCH_SIZE = 16
 NUM_WORKERS = 4
 MAX_EPOCHS = 30
