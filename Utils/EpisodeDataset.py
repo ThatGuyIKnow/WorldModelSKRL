@@ -67,6 +67,7 @@ class EpisodeDataset(Dataset):
 
         for i, row in episode_data.iterrows():
             path = self.image_idx[row['ImagePath']]
+            print(path, self.images.shape)
             next_path = self.image_idx[row['NextImagePath']]
             image = self.images[path]
             next_image = self.images[next_path]           
