@@ -32,8 +32,14 @@ NUM_WORKERS = 4
 MAX_EPOCHS = 100
 SAVE_EVERY_N_EPOCHS = 5
 VAL_SPLIT = 0.1
+GRADIENT_CLIPPING_VAL = 0.5
 IMAGE_VIS_COUNT = 8
 EARLY_STOPPING_PATIENCE = 10
+WANDB_KWARGS = {
+    'log_model': "all", 
+    'prefix': 'vae', 
+    'project': 'world_model_vae',
+}
 
 # Setting the seed for reproducibility
 L.seed_everything(SEED)
@@ -101,7 +107,7 @@ def train_vae():
     val_set, train_loader, val_loader = get_car_racing_dataset()
 
     # Create a PyTorch Lightning trainer with the generation callback
-    wandb_logger = WandbLogger(log_model="all", prefix='vae')
+    wandb_logger = WandbLogger(**WANDB_KWARGS)
     idx = np.random.randint(0, len(val_set), size=IMAGE_VIS_COUNT)
     training_images = torch.stack([val_set[i][0] for i in idx], dim=0)
 
@@ -117,7 +123,7 @@ def train_vae():
             EarlyStopping(monitor='val_loss', mode='min', patience=EARLY_STOPPING_PATIENCE, check_on_train_epoch_end=False),
         ],
         logger=wandb_logger,
-        gradient_clip_val=0.5
+        gradient_clip_val=GRADIENT_CLIPPING_VAL
     )
     trainer.logger._log_graph = True
     trainer.logger._default_hp_metric = None

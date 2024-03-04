@@ -1,23 +1,21 @@
 import os
-from random import randint
 import numpy as np
+from pathlib import Path
 
+import torch
+import torch.utils.data as data
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data as data
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 import torchvision
-from torchvision import transforms
+
 from Models.MDNRNN import MDNRNN
 from Models.VAE import VAE
-from lightning.pytorch.loggers import WandbLogger
-from pathlib import Path
 
 from Utils.EpisodeDataset import EpisodeDataset
 from Utils.TransformerWrapper import TransformWrapper
+from Utils.utils import transpose_2d
 
 # Data Paths
 DATASET_PATH = 'data/carracing-v2/main_details_simulation.csv'
@@ -40,7 +38,11 @@ H_SPACE = 64
 GAUSSIAN_SPACE = 5
 
 # Logging and Model Saving
-WANDB_KWARGS = {'log_model': "all"}
+WANDB_KWARGS = {
+    'log_model': "all", 
+    'prefix': 'mdnrnn', 
+    'project': 'world_model_mdnrnn',
+}
 VAE_CHECKPOINT_REFERENCE = "team-good-models/model-registry/WorldModelVAE:latest"
 
 # Setting the seed
@@ -66,15 +68,14 @@ class GenerateCallback(L.Callback):
         
         self.encoder = vae.encoder
         self.decoder = vae.decoder
-
-        self.input_actions = nn.utils.rnn.pack_sequence([img['actions'].to(DEVICE) for img in input_imgs])
-        self.input_imgs = torch.stack([img['images'][-1] for img in input_imgs]).unsqueeze(dim=1).to(DEVICE)
+        images, actions, _, _, next_images = input_imgs
+        self.input_actions = torch.stack(actions).to(DEVICE)
+        self.input_imgs = torch.stack([img[-1] for img in next_images]).unsqueeze(dim=1).to(DEVICE)
         self.sample_count = len(self.input_imgs)
 
-        input_latent = torch.stack([self._to_latent(img['images'].to(DEVICE)) for img in input_imgs])  # Latents to reconstruct during training
-        self.input_latent = nn.utils.rnn.pack_sequence(input_latent[:, :-1].to(DEVICE))
+        self.input_latent = torch.stack([self._to_latent(img.to(DEVICE)) for img in images])  # Latents to reconstruct during training
         
-        self.image_reconst = self.decoder(input_latent[:, -1])
+        self.image_reconst = self.decoder(self.input_latent[:, -1])
         self.every_n_epochs = every_n_epochs
 
     def _to_latent(self, image):
@@ -86,14 +87,14 @@ class GenerateCallback(L.Callback):
             input_latent = self.input_latent.to(pl_module.device)
             with torch.no_grad():
                 pl_module.eval()
-                mus, sigmas, logpis, _, _, _ = pl_module({'latent':input_latent, 'actions':self.input_actions})
+                mus, sigmas, logpis, _, _, _ = pl_module.forward(input_latent, self.input_actions)
 
-                mus = torch.stack(mus)[:, -1]
-                sigmas = torch.stack(sigmas)[:, -1]
-                logpis = torch.stack(logpis)[:, -1]
+                mus = mus[:, -1]
+                sigmas = sigmas[:, -1]
+                logpis = logpis[:, -1]
 
                 next_latents = pl_module.sample(mus, sigmas, logpis)
-                reconst_imgs = self.decoder(torch.stack(next_latents))
+                reconst_imgs = self.decoder(next_latents)
                 pl_module.train()
 
             imgs = torch.stack([self.input_imgs[:, -1], self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
@@ -101,35 +102,23 @@ class GenerateCallback(L.Callback):
             trainer.logger.log_image(key="Reconstructions_Next_Step", images=[grid], step=trainer.global_step)
 
 def get_car_racing_dataset():
-    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH)    
+    train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder)
     train_set, val_set = torch.utils.data.random_split(train_dataset, [1-VAL_SPLIT, VAL_SPLIT])
 
-    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)
-    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS, collate_fn=EpisodeDataset.collate_fn)
+    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, pin_memory=True, num_workers=NUM_WORKERS)
+    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
 
     return train_loader, val_loader
 
-def get_seq_input_imgs(n=8, p=0.5):
-    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE)
-    seqs = []
+def get_seq_input_imgs(n=8):
+    dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder)
     idx = np.random.randint(0, len(dataset), size=n)
-    for i in idx:
-        seq = dataset[i]
-        seq_len = int(seq['images'].shape[0] * p)
-
-        seq['images'] = seq['images'][:seq_len]
-        seq['actions'] = seq['actions'][:seq_len]
-        seq['rewards'] = seq['rewards'][:seq_len]
-        seq['dones'] = seq['dones'][:seq_len]
-
-        seqs.append(seq)
-    return seqs
+    return transpose_2d([dataset.get_image_seq(i) for i in idx])
 
 def train_mdnrnn():
     train_loader, val_loader = get_car_racing_dataset()
     input_seqs = get_seq_input_imgs()
 
-    wandb_logger = WandbLogger(log_model="all", prefix='mdnrnn')
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % LATENT_DIM),
         devices=1,
@@ -150,10 +139,10 @@ def train_mdnrnn():
     if os.path.isfile(pretrained_filename):
         print("Found pretrained model, loading...")
         model = MDNRNN.load_from_checkpoint(pretrained_filename)
-        model.encoding = encoding_model.encoder
     else:
-        model = MDNRNN(LATENT_DIM, ACTION_SPACE, H_SPACE, GAUSSIAN_SPACE, device=DEVICE)
-        model.encoding = encoding_model.encoder
+        model = MDNRNN(LATENT_DIM, ACTION_SPACE, H_SPACE, GAUSSIAN_SPACE)
+
+        
         trainer.fit(model, train_loader, val_loader)
     val_result = trainer.test(model, dataloaders=val_loader, verbose=False)
     result = {"val": val_result}

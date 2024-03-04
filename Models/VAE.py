@@ -114,7 +114,9 @@ class VAE(L.LightningModule):
         return F.mse_loss(recon_x, batch, reduction='sum')
     
     def _get_regularization_loss(self, logsigma, mu):
-        return -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
+        sigma = (0.5 * logsigma).exp()
+        sigma = torch.nan_to_num(sigma, 0, neginf=0, posinf=math.exp(self.reg_clip))
+        return torch.mean(-0.5 * torch.sum(1 + logsigma - mu.pow(2) - sigma, dim=1),dim=0)
     
 
     # ============================================
