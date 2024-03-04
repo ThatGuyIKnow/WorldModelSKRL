@@ -7,6 +7,8 @@ import torch.nn as nn
 import ast
 import re
 
+from tqdm import tqdm
+
 
 class EpisodeDataset(Dataset):
     def __init__(self, csv_file, transform=None, encoder = None, action_space = None, seq_length=16, device='cpu'):
@@ -17,13 +19,23 @@ class EpisodeDataset(Dataset):
         csv_file (str): Path to the CSV file containing episode data.
         transform (callable, optional): Optional transform to be applied on a sample.
         """
-        self.episode_data = pd.read_csv(csv_file)
-        self.transform = transform
+        self.episode_data = pd.read_csv(csv_file)[:1000]
+        self.episode_data['Action'] = self.episode_data['Action'].apply(lambda x: ast.literal_eval(re.sub(r"\s+", ',', x)))
+        self.encoder = encoder.to(device)
+
+        self.image_paths = pd.concat([self.episode_data['ImagePath'], self.episode_data['NextImagePath']]).unique()
+        self.image_idx = pd.Series(range(len(self.image_paths)), index=self.image_paths)
+        self.images = torch.stack([transform(Image.open(path)) for path in tqdm(image_paths)]).to(device)
+        _, _, self.images = encoder(self.images)
+
+        self.actions = self.episode_data['Action'].apply(torch.tensor, by_row=False).to(device)
+        self.rewards = torch.tensor(self.episode_data['Reward'], device=device)
+        self.dones = torch.tensor(self.episode_data['Done'], device=device)
+
         if action_space is None:
             self.action_space = len(self.episode_data['Action'].unique())
         else:
             self.action_space = action_space
-        self.encoder = encoder.to(device)
         self.seq_length = seq_length
 
         # Drop last SEQ length to ensure equal length training data
@@ -36,19 +48,6 @@ class EpisodeDataset(Dataset):
         return len(self.allowed_idx) // self.seq_length
 
     def __getitem__(self, idx):
-        
-        images, actions, rewards, dones, next_images = self.get_image_seq(idx)
-        
-        _, _, latent = self.encoder(images)
-        _, _, next_latent = self.encoder(next_images)
-
-        latent = latent.squeeze(dim=0).clone().detach()
-        next_latent = next_latent.squeeze(dim=0).clone().detach()
-        
-        return latent, actions, rewards, dones, next_latent
-
-    def get_image_seq(self, idx):
-
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -62,39 +61,18 @@ class EpisodeDataset(Dataset):
         rewards = []
         dones = []
 
-        for _, row in episode_data.iterrows():
-            image = Image.open(row['ImagePath'])
-            next_image = Image.open(row['NextImagePath'])
-            if self.transform:
-                image = self.transform(image)
-                next_image = self.transform(next_image)
-            action = row['Action']
-            if isinstance(action, str):
-                action = ast.literal_eval(re.sub(r"\s+", ',', action))
-            
+        for i, row in episode_data.iterrows():
+            image = self.images[self.image_idx[row['ImagePath']]]
+            next_image = self.images[self.image_idx[row['NextImagePath']]]           
             images.append(image)
             next_images.append(next_image)
-            actions.append(action)
-            rewards.append(row['Reward'])
-            dones.append(row['Done'])
-
-        actions = torch.tensor(actions, dtype=torch.long)
 
         images = torch.stack(images)
         next_images = torch.stack(next_images)
-        if actions.shape[-1] == 1:
-            actions = F.one_hot(actions, self.action_space).float() 
-        else:
-            actions = actions.float()
-        rewards =  torch.tensor(rewards, dtype=torch.float)
-        dones = torch.tensor(dones, dtype=torch.float)
-        
-        images = images.to(self.device)
-        actions = actions.to(self.device)
-        rewards = rewards.to(self.device)
-        dones = dones.to(self.device)
-        next_images = next_images.to(self.device)
-        
+        actions = self.actions[min_idx:max_idx]
+        rewards = self.rewards[min_idx:max_idx]
+        dones = self.dones[min_idx:max_idx]
+
         
         return images, actions, rewards, dones, next_images
 

@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from pathlib import Path
+from PIL import Image
 
 import torch
 import torch.utils.data as data
@@ -55,11 +56,10 @@ torch.backends.cudnn.benchmark = False
 transform = TransformWrapper.transform
 
 print("Device:", DEVICE)
-if __name__ == '__main__':
-    wandb_logger = WandbLogger(**WANDB_KWARGS)
-    vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
-    encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
-    encoding_model.freeze()
+wandb_logger = WandbLogger(**WANDB_KWARGS)
+vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
+encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
+encoding_model.freeze()
 
 class GenerateCallback(L.Callback):
     def __init__(self, input_imgs, vae, action_shape, every_n_epochs=1):
@@ -105,26 +105,27 @@ def get_car_racing_dataset():
     train_dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder, device=DEVICE)
     train_set, val_set = torch.utils.data.random_split(train_dataset, [1-VAL_SPLIT, VAL_SPLIT])
 
-    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, num_workers=NUM_WORKERS, multiprocessing_context='spawn')
-    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS, multiprocessing_context='spawn')
+    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=True, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
 
     return train_loader, val_loader
 
 def get_seq_input_imgs(n=8):
     dataset = EpisodeDataset(DATASET_PATH, transform=transform, action_space=ACTION_SPACE, seq_length=SEQ_LENGTH, encoder=encoding_model.encoder)
     idx = np.random.randint(0, len(dataset), size=n)
-    return transpose_2d([dataset.get_image_seq(i) for i in idx])
+    images = [Image.open(dataset.image_paths[i]) for i in idx]
+    return images, torch.stack([dataset[i] for i in idx]).T
 
 def train_mdnrnn():
     train_loader, val_loader = get_car_racing_dataset()
-    input_seqs = get_seq_input_imgs()
+    images, input_seqs = get_seq_input_imgs()
 
     trainer = L.Trainer(
         default_root_dir=os.path.join(CHECKPOINT_PATH, "mdnrnn_%i" % LATENT_DIM),
         devices=1,
         max_epochs=MAX_EPOCHS,
         callbacks=[
-            GenerateCallback(input_seqs, encoding_model, ACTION_SPACE, 1),
+            GenerateCallback(images, input_seqs, encoding_model, ACTION_SPACE, 1),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
             EarlyStopping(monitor='val_loss', mode='min', patience=EARLY_STOPPING_PATIENCE, check_on_train_epoch_end=False)
