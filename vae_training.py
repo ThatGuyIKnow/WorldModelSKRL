@@ -117,6 +117,7 @@ def train_vae():
             EarlyStopping(monitor='val_loss', mode='min', patience=EARLY_STOPPING_PATIENCE, check_on_train_epoch_end=False),
         ],
         logger=wandb_logger,
+        gradient_clip_val=0.5
     )
     trainer.logger._log_graph = True
     trainer.logger._default_hp_metric = None
