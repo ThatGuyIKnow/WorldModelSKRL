@@ -29,8 +29,10 @@ class EpisodeDataset(Dataset):
 
         self.image_paths = pd.concat([self.episode_data['ImagePath'], self.episode_data['NextImagePath']]).unique()
         self.image_idx = pd.Series(range(len(self.image_paths)), index=self.image_paths)
-        self.images = torch.stack([transform(Image.open(path)) for path in tqdm(self.image_paths)]).to(device)
-        _, _, self.images = encoder(self.images)
+
+        images = torch.stack([transform(Image.open(path)) for path in tqdm(self.image_paths)]).to(device)
+        _, _, images = encoder(images)
+        self.images = pd.Series([img for img in images])
 
         self.actions = self.episode_data['Action'].apply(torch.tensor, by_row=False).to(device)
         self.rewards = torch.tensor(self.episode_data['Reward'], device=device)
@@ -67,7 +69,6 @@ class EpisodeDataset(Dataset):
 
         for i, row in episode_data.iterrows():
             path = self.image_idx[row['ImagePath']]
-            print(path, self.images.shape)
             next_path = self.image_idx[row['NextImagePath']]
             image = self.images[path]
             next_image = self.images[next_path]           
