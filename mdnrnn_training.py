@@ -57,8 +57,6 @@ print("Device:", DEVICE)
 wandb_logger = WandbLogger(**WANDB_KWARGS)
 vae_dir = wandb_logger.download_artifact(VAE_CHECKPOINT_REFERENCE, artifact_type="model")
 encoding_model = VAE.load_from_checkpoint(Path(vae_dir) / "model.ckpt").to(DEVICE)
-encoding_model.encoder = encoding_model.encoder.to(DEVICE)
-encoding_model.decoder = encoding_model.decoder.to(DEVICE)
 encoding_model.freeze()
 
 transform = TransformWrapper.transform
@@ -68,8 +66,8 @@ class GenerateCallback(L.Callback):
         super().__init__()
         self.action_shape = action_shape
         
-        self.encoder = vae.encoder
-        self.decoder = vae.decoder
+        self.encoder = vae.encoder.to(DEVICE)
+        self.decoder = vae.decoder.to(DEVICE)
         images, actions, _, _, next_images = input_imgs
         self.input_actions = torch.stack(actions).to(DEVICE)
         self.input_imgs = torch.stack([img[-1] for img in next_images]).unsqueeze(dim=1).to(DEVICE)
