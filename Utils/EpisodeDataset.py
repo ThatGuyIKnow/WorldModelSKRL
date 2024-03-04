@@ -69,7 +69,7 @@ class EpisodeDataset(Dataset):
             path = self.image_idx[row['ImagePath']]
             next_path = self.image_idx[row['NextImagePath']]
             image = self.images[path]
-            next_image = self.images[next_image]           
+            next_image = self.images[next_path]           
             images.append(image)
             next_images.append(next_image)
 
