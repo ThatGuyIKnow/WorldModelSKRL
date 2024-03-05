@@ -41,7 +41,7 @@ env = gym.make("CarRacing-v2", render_mode='rgb_array')
 env = Monitor(env)  # Monitor the environment (Necessary for Wandb)
 env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0)  # Record videos
 env = TransformWrapper(env)  # Apply necessary visual transformations to the environment
-env = WorldModelWrapper(env, vae, mdnrnn, output_dim=32+64, episode_trigger=lambda x: x % 10 == 0, use_wandb=True)  # Engange the WorldModel
+env = WorldModelWrapper(env, vae, mdnrnn, output_dim=32+64, episode_trigger=lambda x: x % 10 == 0, use_wandb=True, device = device)  # Engange the WorldModel
 env = wrap_env(env)  # Wrap environment with skrl wrapper to make it compatible
 
 # Instantiate actor and critic models
