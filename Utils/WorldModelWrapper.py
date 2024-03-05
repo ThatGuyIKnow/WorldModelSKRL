@@ -93,7 +93,7 @@ class WorldModelWrapper(gym.Wrapper):
         imgs = np.repeat(imgs, 3, axis=1)
         imgs = np.moveaxis(imgs, 1, -1)
 
-        env_imgs = np.stack([cv2.resize(img, dsize=(200, 300), interpolation=cv2.INTER_CUBIC) for img in self.env_frames], axis=0)
+        env_imgs = np.stack([cv2.resize(img, dsize=(200, 133), interpolation=cv2.INTER_CUBIC) for img in self.env_frames], axis=0)
 
         imgs = np.concatenate([env_imgs, imgs], axis=1)
         # Create a video writer object
