@@ -46,10 +46,10 @@ class WorldModelWrapper(gym.Wrapper):
 
     def step(self, action):
         next_obs, reward, done, truncated, info = self.env.step(action)
+        next_obs = torch.tensor(next_obs, device=self.device)
+        action = torch.tensor(action, device=self.device).view(1, -1)
 
-        action = torch.Tensor(action).view(1, -1)
-
-        _, _, latent_next = self.vae_model.encoder(torch.tensor(next_obs, device=self.device))  # Assuming encode method exists in your VAE model
+        _, _, latent_next = self.vae_model.encoder(next_obs)  # Assuming encode method exists in your VAE model
         input =  torch.cat([latent_next, action], dim=-1)
         _, _, _, _, _, next_hidden = self.mdnrnn_model.cell(input, self.hidden_state)  # Assuming predict method exists in your MDNRNN model
         self.hidden_state = next_hidden
