@@ -101,7 +101,7 @@ class WorldModelWrapper(gym.Wrapper):
         clip.write_videofile(self.path.format(self.episode_id_video, '.mp4'), fps=fps)
         
         # Log video to wandb
-        if self.wandb and imgs.shpae[0] > 1:
+        if self.wandb and imgs.shape[0] > 1:
             wandb.log({"Reconstruction": wandb.Video(self.path.format(self.episode_id_video, '.mp4'), fps=fps)})
 
 
