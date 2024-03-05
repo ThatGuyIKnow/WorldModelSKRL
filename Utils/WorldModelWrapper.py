@@ -38,8 +38,8 @@ class WorldModelWrapper(gym.Wrapper):
         _, _, latent = self.vae_model.encoder(torch.tensor(obs, device=self.device))  # Assuming encode method exists in your VAE model
         self.hidden_state = self.mdnrnn_model.initial_state()
 
-        self.close_recording()
         self.record_reconstruction(latent)
+        self.close_recording()
 
         observation = torch.concat([latent, self.hidden_state[0]], dim=-1)
         return observation, info

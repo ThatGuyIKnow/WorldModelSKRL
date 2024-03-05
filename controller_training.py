@@ -1,8 +1,9 @@
+import skrl
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-import gymnasium as gym
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch import SequentialTrainer
 from skrl.envs.wrappers.torch import wrap_env
+import gymnasium as gym
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
 import torch
@@ -14,6 +15,7 @@ from Utils.TransformerWrapper import TransformWrapper
 from stable_baselines3.common.monitor import Monitor
 from Utils.WorldModelWrapper import WorldModelWrapper
 
+skrl.utils.set_seed(42)
 
 # Set device (CPU or GPU)
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -58,18 +60,18 @@ models = {"policy": policy, "value": critic}  # Models used by the agent during 
 
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['learning_starts'] = 1024
+cfg_agent['rollouts'] = 256
+cfg_agent['learning_starts'] = cfg_agent['rollouts']
 cfg_agent['entropy_loss_scale'] = 1e-2
 cfg_agent['learning_rate'] = 1e-3
 cfg_agent['mini_batches'] = 4
 cfg_agent['learning_epochs'] = 8
 cfg_agent['vf_coef'] = 0.5
-cfg_agent['rollouts'] = 1024
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
 
 # Instantiate experience memory for the agent
-memory = RandomMemory(memory_size=1024, num_envs=1, device=device, replacement=False)
+memory = RandomMemory(memory_size=cfg_agent['rollouts'], num_envs=1, device=device, replacement=False)
 
 # Instantiate the PPO agent
 agent = PPO(models=models,
