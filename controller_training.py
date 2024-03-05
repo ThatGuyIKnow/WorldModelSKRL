@@ -58,28 +58,29 @@ models = {"policy": policy, "value": critic}  # Models used by the agent during 
 
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['learning_starts'] = 10001
+cfg_agent['learning_starts'] = 1024
 cfg_agent['entropy_loss_scale'] = 1e-2
 cfg_agent['learning_rate'] = 2.5e-3
 cfg_agent['mini_batches'] = 4
 cfg_agent['learning_epochs'] = 8
 cfg_agent['vf_coef'] = 0.5
-cfg_agent['rollouts'] = 128
+cfg_agent['rollouts'] = 1024
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
 
 # Instantiate experience memory for the agent
-memory = RandomMemory(memory_size=10000, num_envs=1, device=device, replacement=False)
+memory = RandomMemory(memory_size=1024, num_envs=1, device=device, replacement=False)
 
 # Instantiate the PPO agent
 agent = PPO(models=models,
+            memory=memory,
             cfg=cfg_agent,
             observation_space=env.observation_space,
             action_space=env.action_space,
             device=device)
 
 # Trainer configuration
-cfg_trainer = {"timesteps": int(1e5 + 1e4), "headless": True}
+cfg_trainer = {"timesteps": int(1e5), "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ])
 
 # Start training
