@@ -88,7 +88,7 @@ class GenerateCallback(L.Callback):
                 pl_module.train()
 
             imgs = torch.stack([self.image_reconst, reconst_imgs], dim=1).flatten(0, 1)
-            grid = torchvision.utils.make_grid(imgs, nrow=3, normalize=True)
+            grid = torchvision.utils.make_grid(imgs, nrow=2, normalize=True)
             trainer.logger.log_image(key="Reconstructions_Next_Step", images=[grid], step=trainer.global_step)
 
 def get_car_racing_dataset():

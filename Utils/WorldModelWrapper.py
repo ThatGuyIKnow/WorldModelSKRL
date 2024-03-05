@@ -6,8 +6,11 @@ import torch
 from torchvision import transforms
 import wandb
 
+from Models.MDNRNN import MDNRNN
+from Models.VAE import VAE
+
 class WorldModelWrapper(gym.Wrapper):
-    def __init__(self, env, vae_model, mdnrnn_model, output_dim=32+64, episode_trigger=lambda x: False, use_wandb = False):
+    def __init__(self, env, vae_model: VAE, mdnrnn_model: MDNRNN, output_dim=32+64, episode_trigger=lambda x: False, use_wandb = False):
         super().__init__(env)
 
         self.vae_model = vae_model
@@ -46,7 +49,8 @@ class WorldModelWrapper(gym.Wrapper):
         action = torch.Tensor(action).view(1, -1)
 
         _, _, latent_next = self.vae_model.encoder(next_obs)  # Assuming encode method exists in your VAE model
-        mus, sigmas, logpi, r, d, next_hidden = self.mdnrnn_model.cell(action, latent_next, self.hidden_state)  # Assuming predict method exists in your MDNRNN model
+        input =  torch.cat([latent_next, action], dim=-1)
+        _, _, _, _, _, next_hidden = self.mdnrnn_model.cell(input, self.hidden_state)  # Assuming predict method exists in your MDNRNN model
         self.hidden_state = next_hidden
         next_observation = torch.concat([latent_next, self.hidden_state[0]], dim=-1)
 
