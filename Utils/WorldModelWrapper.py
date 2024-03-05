@@ -88,7 +88,7 @@ class WorldModelWrapper(gym.Wrapper):
         # Convert image to uint8 and resize to fit the video dimensions
         transform = transforms.Resize((400, 400))
         imgs = torch.stack([transform(img) for img in decoded_observation])
-        imgs = (imgs.detach().numpy()*255).astype(np.uint8)
+        imgs = (imgs.cpu().detach().numpy()*255).astype(np.uint8)
         imgs = np.repeat(imgs, 3, axis=1)
         imgs = np.moveaxis(imgs, 1, -1)
         # Create a video writer object
