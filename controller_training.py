@@ -61,7 +61,7 @@ models = {"policy": policy, "value": critic}  # Models used by the agent during 
 
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['rollouts'] = 256
+cfg_agent['rollouts'] = 2048
 cfg_agent['learning_starts'] = cfg_agent['rollouts']
 cfg_agent['entropy_loss_scale'] = 1e-2
 cfg_agent['learning_rate'] = 1e-3
