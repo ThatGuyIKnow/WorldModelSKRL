@@ -3,6 +3,7 @@ from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch import SequentialTrainer
 from skrl.envs.wrappers.torch import wrap_env
+from skrl.utils import set_seed
 import gymnasium as gym
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
@@ -15,7 +16,7 @@ from Utils.TransformerWrapper import TransformWrapper
 from stable_baselines3.common.monitor import Monitor
 from Utils.WorldModelWrapper import WorldModelWrapper
 
-skrl.utils.set_seed(42)
+set_seed(42)
 
 # Set device (CPU or GPU)
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
