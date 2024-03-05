@@ -80,7 +80,7 @@ agent = PPO(models=models,
             device=device)
 
 # Trainer configuration
-cfg_trainer = {"timesteps": int(2e5), "headless": True}
+cfg_trainer = {"timesteps": int(4e5), "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ])
 
 # Start training
