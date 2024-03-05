@@ -38,8 +38,8 @@ class WorldModelWrapper(gym.Wrapper):
         _, _, latent = self.vae_model.encoder(torch.tensor(obs, device=self.device))  # Assuming encode method exists in your VAE model
         self.hidden_state = self.mdnrnn_model.initial_state()
 
-        self.record_reconstruction(latent)
         self.close_recording()
+        self.record_reconstruction(latent)
 
         observation = torch.concat([latent, self.hidden_state[0]], dim=-1)
         return observation, info
@@ -60,17 +60,16 @@ class WorldModelWrapper(gym.Wrapper):
         return next_observation, reward, done, truncated, info
 
     def record_reconstruction(self, latent):
-        if self.recording is False:
-            self.recording = self.episode_trigger(self.episode_id)
+        if self.recording is False and self.episode_trigger(self.episode_id):
+            self.recording = True
             self.episode_id_video = self.episode_id
             
         
-        if self.recording is False:
-            return
+        if self.recording is True:
+            # Append the image to the video frames list
+            self.frames.append(latent)
+            self.env_frames.append(self.env.render())
 
-        # Append the image to the video frames list
-        self.frames.append(latent)
-        self.env_frames.append(self.env.render())
 
     def write_metadata(self):
         """Writes metadata to metadata path."""
@@ -102,7 +101,7 @@ class WorldModelWrapper(gym.Wrapper):
         clip.write_videofile(self.path.format(self.episode_id_video, '.mp4'), fps=fps)
         
         # Log video to wandb
-        if self.wandb:
+        if self.wandb and imgs.shpae[0] > 1:
             wandb.log({"Reconstruction": wandb.Video(self.path.format(self.episode_id_video, '.mp4'), fps=fps)})
 
 
