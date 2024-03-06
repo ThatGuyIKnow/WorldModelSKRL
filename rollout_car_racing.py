@@ -129,7 +129,7 @@ run_workers(
     total_steps=int(1e6/8), 
     max_eps_length=1000, 
     skip_first=50,
-    repeat_action=200,
+    repeat_action=4,
     frame_skip=4
 )
 collate_csv('./data/carracing-v2', num_workers=8)
