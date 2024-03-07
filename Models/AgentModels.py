@@ -9,14 +9,14 @@ class CriticMLP(DeterministicMixin, Model):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self, clip_actions)
 
-        self.net = nn.Sequential(nn.Linear(self.observation_space.shape[0], 400),
+        self.net = nn.Sequential(nn.Linear(self.observation_space.shape[0] + self.action_space.shape[0], 400),
                                  nn.Tanh(),
                                  nn.Linear(400, 300),
                                  nn.Tanh(),
                                  nn.Linear(300, 1))
 
     def compute(self, inputs, role):
-        return self.net(inputs["states"]), {}
+        return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
 
 
 
