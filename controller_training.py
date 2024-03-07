@@ -12,6 +12,7 @@ import torch
 from Models.AgentModels import ActorMLP, CriticMLP
 from Models.VAE import VAE
 from Models.MDNRNN import MDNRNN
+from Utils.ClipRewardWrapper import ClipRewardWrapper
 from Utils.TransformerWrapper import TransformWrapper
 from stable_baselines3.common.monitor import Monitor
 from Utils.WorldModelWrapper import WorldModelWrapper
@@ -41,6 +42,7 @@ mdnrnn.freeze()
 
 # Create the environment
 env = gym.make("CarRacing-v2", render_mode='rgb_array')
+env = ClipRewardWrapper(env, -0.101, 100)  
 env = Monitor(env)  # Monitor the environment (Necessary for Wandb)
 env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0)  # Record videos
 env = TransformWrapper(env)  # Apply necessary visual transformations to the environment
