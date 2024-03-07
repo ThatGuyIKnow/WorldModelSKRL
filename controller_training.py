@@ -61,6 +61,10 @@ policy = ActorMLP(observation_space=env.observation_space,
 # Model dictionary
 models = {"policy": policy, "value": critic}  # Models used by the agent during training
 
+# initialize models' parameters (weights and biases)
+for model in models.values():
+    model.init_parameters(method_name="normal_", mean=0.0, std=0.1)
+
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
 cfg_agent['rollouts'] = 1024

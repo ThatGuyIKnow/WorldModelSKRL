@@ -33,6 +33,8 @@ class WorldModelWrapper(gym.Wrapper):
         self.wandb = use_wandb
         self.device = device
 
+        self.latent = None
+
     def reset(self):
         obs, info = self.env.reset()
         _, _, latent = self.vae_model.encoder(torch.tensor(obs, device=self.device))  # Assuming encode method exists in your VAE model
@@ -42,6 +44,7 @@ class WorldModelWrapper(gym.Wrapper):
         self.record_reconstruction(latent)
 
         observation = torch.concat([latent, self.hidden_state[0]], dim=-1)
+        self.latent = latent
         return observation, info
 
     def step(self, action):
@@ -49,13 +52,16 @@ class WorldModelWrapper(gym.Wrapper):
         next_obs = torch.tensor(next_obs, device=self.device)
         action = torch.tensor(action, device=self.device).view(1, -1)
 
-        _, _, latent_next = self.vae_model.encoder(next_obs)  # Assuming encode method exists in your VAE model
-        input =  torch.cat([latent_next, action], dim=-1)
+
+        latent_next_mu, _, _ = self.vae_model.encoder(next_obs)  # Assuming encode method exists in your VAE model
+        
+        input = torch.concat([self.latent, action], dim=-1)
         _, _, _, _, _, next_hidden = self.mdnrnn_model.cell(input, self.hidden_state)  # Assuming predict method exists in your MDNRNN model
         self.hidden_state = next_hidden
-        next_observation = torch.concat([latent_next, self.hidden_state[0]], dim=-1)
+        next_observation = torch.concat([latent_next_mu, self.hidden_state[0]], dim=-1)
 
-        self.record_reconstruction(latent_next)
+        self.latent =  latent_next_mu
+        self.record_reconstruction(latent_next_mu)
 
         return next_observation, reward, done, truncated, info
 
