@@ -1,5 +1,5 @@
 import skrl
-from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch import SequentialTrainer
 from skrl.envs.wrappers.torch import wrap_env
@@ -61,28 +61,39 @@ policy = ActorMLP(observation_space=env.observation_space,
 # Model dictionary
 models = {"policy": policy, "value": critic}  # Models used by the agent during training
 
+models = {}
+models["policy"] = ActorMLP(env.observation_space, env.action_space, device, clip_actions=True)
+models["critic_1"] = CriticMLP(env.observation_space, env.action_space, device)
+models["critic_2"] = CriticMLP(env.observation_space, env.action_space, device)
+models["target_critic_1"] = CriticMLP(env.observation_space, env.action_space, device)
+models["target_critic_2"] = CriticMLP(env.observation_space, env.action_space, device)
+
+# initialize models' parameters (weights and biases)
+for model in models.values():
+    model.init_parameters(method_name="normal_", mean=0.0, std=0.1)
+
+# initialize models' parameters (weights and biases)
 # Configure agent's default parameters
-cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['rollouts'] = 1024
-cfg_agent['learning_starts'] = cfg_agent['rollouts']
-cfg_agent['entropy_loss_scale'] = 1e-2
-cfg_agent['learning_rate'] = 1e-3
-cfg_agent['mini_batches'] = 4
-cfg_agent['learning_epochs'] = 8
-cfg_agent['vf_coef'] = 0.5
+cfg_agent = SAC_DEFAULT_CONFIG.copy()
+cfg_agent["discount_factor"] = 0.98
+cfg_agent["batch_size"] = 100
+cfg_agent["random_timesteps"] = 0
+cfg_agent["learning_starts"] = 1000
+cfg_agent["learn_entropy"] = True
+
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
 
 # Instantiate experience memory for the agent
-memory = RandomMemory(memory_size=cfg_agent['rollouts'], num_envs=1, device=device, replacement=False)
+memory = RandomMemory(memory_size=20000, num_envs=1, device=device, replacement=False)
 
-# Instantiate the PPO agent
-agent = PPO(models=models,
+agent = SAC(models=models,
             memory=memory,
             cfg=cfg_agent,
             observation_space=env.observation_space,
             action_space=env.action_space,
             device=device)
+
 
 # Trainer configuration
 cfg_trainer = {"timesteps": int(4e5), "headless": True}
