@@ -11,13 +11,14 @@ from Models.MDNRNN import MDNRNN
 from Models.VAE import VAE
 
 class WorldModelWrapper(gym.Wrapper):
-    def __init__(self, env, vae_model: VAE, mdnrnn_model: MDNRNN, output_dim=32+64, episode_trigger=lambda x: False, use_wandb = False, device = 'cpu'):
+    def __init__(self, env, vae_model: VAE, mdnrnn_model: MDNRNN, output_dim=32+64, num_envs=1, episode_trigger=lambda x: False, use_wandb = False, device = 'cpu'):
         super().__init__(env)
 
         self.vae_model = vae_model
         self.mdnrnn_model = mdnrnn_model
 
-        self.observation_space = gym.spaces.Box(low = -np.ones(output_dim,),  high = np.ones(output_dim,),dtype = np.float16)
+        self.num_envs = num_envs
+        self.observation_space = gym.spaces.Box(low = -10*np.ones(output_dim,),  high = 10*np.ones(output_dim,), dtype = np.float16)
         self.action_space = self.env.action_space
         self.hidden_state = self.mdnrnn_model.initial_state()
 
@@ -33,6 +34,7 @@ class WorldModelWrapper(gym.Wrapper):
         self.wandb = use_wandb
         self.device = device
 
+        self.episode_id = 0
         self.latent = None
 
     def reset(self):
