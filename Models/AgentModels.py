@@ -13,10 +13,10 @@ class CriticMLP(DeterministicMixin, Model):
                                  nn.Tanh(),
                                  nn.Linear(64, 64),
                                  nn.Tanh(),
-                                 nn.Linear(64, 1))
+                                 nn.Linear(64, 1)).to(device)
 
     def compute(self, inputs, role):
-        return self.net(inputs["states"]), {}
+        return self.net(inputs["states"]).to(self.device), {}
 
 
 
@@ -30,11 +30,11 @@ class ActorMLP(GaussianMixin, Model):
                                  nn.Tanh(),
                                  nn.Linear(64, 64),
                                  nn.Tanh(),
-                                 nn.Linear(64, self.num_actions))
+                                 nn.Linear(64, self.num_actions)).to(self.device)
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
     def to_action(self, input):
-        return (input +  torch.tensor( [0, 1, 1] )).to(self.device) / torch.Tensor([1, 2, 2]).to(self.device)
+        return (input +  torch.tensor( [0, 1, 1] ).to(self.device)) / torch.Tensor([1, 2, 2]).to(self.device)
     
     def compute(self, inputs, role):
         return self.to_action(torch.tanh(self.net(inputs["states"]))), self.log_std_parameter, {}
