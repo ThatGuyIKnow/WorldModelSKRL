@@ -88,24 +88,3 @@ class EpisodeDataset(Dataset):
         
         return images, actions, rewards, dones, next_images
 
-
-    # def collate_key(value, seq_lengths, order_indicies):
-    #     value = nn.utils.rnn.pad_sequence(value, batch_first=True)
-    #     value = value[order_indicies].clone().detach()
-        
-    #     value = nn.utils.rnn.pack_padded_sequence(value, seq_lengths, batch_first=True)
-
-    #     return value
-
-    # def collate_fn(batch):
-    #     seq_lengths = torch.tensor([seq['images'].shape[0] for seq in batch])
-    #     order_indicies = torch.argsort(seq_lengths, descending=True)
-        
-    #     #Order sequence
-    #     seq_lengths = seq_lengths[order_indicies]
-
-
-    #     keys = ['images', 'next_images', 'actions', 'rewards', 'dones']
-    #     batch = {key : [sample[key] for sample in batch] for key in keys}
-    #     coll_batch = {key : EpisodeDataset.collate_key(batch[key], seq_lengths, order_indicies) for key in keys}
-    #     return coll_batch
