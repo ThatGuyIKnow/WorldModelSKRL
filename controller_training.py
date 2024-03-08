@@ -45,11 +45,11 @@ mdnrnn.freeze()
 
 # Create the environment
 env = gym.make("CarRacing-v2", render_mode='rgb_array')
-env = ClipRewardWrapper(env, -0.101, 100)  
+env = ClipRewardWrapper(env, -0.101, 1.)  
 env = Monitor(env)  # Monitor the environment (Necessary for Wandb)
-env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 10 == 0)  # Record videos
+env = gym.wrappers.RecordVideo(env, './videos/CarRacing', episode_trigger=lambda x: x % 100 == 0)  # Record videos
 env = TransformWrapper(env)  # Apply necessary visual transformations to the environment
-env = WorldModelWrapper(env, vae, mdnrnn, output_dim=LATENT_SPACE+HIDDEN_SPACE, episode_trigger=lambda x: x % 10 == 0, use_wandb=True, device = device)  # Engange the WorldModel
+env = WorldModelWrapper(env, vae, mdnrnn, output_dim=LATENT_SPACE+HIDDEN_SPACE, episode_trigger=lambda x: x % 100 == 0, use_wandb=True, device = device)  # Engange the WorldModel
 env = wrap_env(env)  # Wrap environment with skrl wrapper to make it compatible
 
 # Instantiate actor and critic models
@@ -70,12 +70,12 @@ for model in models.values():
 
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['rollouts'] = 128
+cfg_agent['rollouts'] = 1024
 cfg_agent['learning_starts'] = cfg_agent['rollouts']
 cfg_agent['entropy_loss_scale'] = 1e-2
-cfg_agent['learning_rate'] = 1e-3
+cfg_agent['learning_rate'] = 3e-4
 cfg_agent['mini_batches'] = 4
-cfg_agent['learning_epochs'] = 10
+cfg_agent['learning_epochs'] = 8
 cfg_agent['vf_coef'] = 0.5
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
@@ -92,7 +92,7 @@ agent = PPO(models=models,
             device=device)
 
 # Trainer configuration
-cfg_trainer = {"timesteps": int(4e5), "headless": True}
+cfg_trainer = {"timesteps": int(1e6), "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=[agent, ])
 
 # Start training
