@@ -19,6 +19,7 @@ class EpisodeDataset(Dataset):
         csv_file (str): Path to the CSV file containing episode data.
         transform (callable, optional): Optional transform to be applied on a sample.
         """
+        print('RETREIVING DATASET')
         if limit_size is None:
             self.episode_data = pd.read_csv(csv_file)
         else:
