@@ -33,6 +33,9 @@ class ActorMLP(GaussianMixin, Model):
                                  nn.Linear(64, self.num_actions))
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
+    def to_action(self, input):
+        return (input +  torch.tensor( [0, 1, 1], device=self.device )) / torch.Tensor([1, 2, 2], device=self.device)
+    
     def compute(self, inputs, role):
-        return (torch.tanh(self.net(inputs["states"])) + torch.tensor( [0, 1, 1])) / torch.Tensor([1, 2, 2]), self.log_std_parameter, {}
+        return self.to_action(torch.tanh(self.net(inputs["states"]))), self.log_std_parameter, {}
     
