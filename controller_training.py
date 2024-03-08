@@ -70,12 +70,12 @@ for model in models.values():
 
 # Configure agent's default parameters
 cfg_agent = PPO_DEFAULT_CONFIG.copy()
-cfg_agent['rollouts'] = 1024
+cfg_agent['rollouts'] = 128
 cfg_agent['learning_starts'] = cfg_agent['rollouts']
 cfg_agent['entropy_loss_scale'] = 1e-2
 cfg_agent['learning_rate'] = 1e-3
-cfg_agent['mini_batches'] = 4
-cfg_agent['learning_epochs'] = 8
+cfg_agent['mini_batches'] = 128
+cfg_agent['learning_epochs'] = 10
 cfg_agent['vf_coef'] = 0.5
 cfg_agent['experiment']['wandb'] = True
 cfg_agent['experiment']['wandb_kwargs'] = {'project': 'world_model', 'monitor_gym': True}
