@@ -37,6 +37,7 @@ class WorldModelWrapper(gym.Wrapper):
         self.episode_id = 0
         self.latent = None
 
+
     def reset(self):
         obs, info = self.env.reset()
         _, _, latent = self.vae_model.encoder(torch.tensor(obs, device=self.device))  # Assuming encode method exists in your VAE model
@@ -66,6 +67,12 @@ class WorldModelWrapper(gym.Wrapper):
         self.record_reconstruction(latent_next_mu)
 
         return next_observation, reward, done, truncated, info
+
+    def train(self, obs, reward, done, next_obs):
+        decoder_loss = self.vae_model.training_step(next_obs)
+        self.mdnrnn_model.cell()
+
+
 
     def record_reconstruction(self, latent):
         if self.recording is False and self.episode_trigger(self.episode_id):

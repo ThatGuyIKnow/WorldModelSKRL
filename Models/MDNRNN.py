@@ -20,14 +20,15 @@ class MDRNNCell_(nn.Module):
         self.gaussians = gaussians
 
         self.gmm_linear = nn.Linear(
-            hiddens, (2 * latents + 1) * gaussians + 2)
+            hiddens, (2 * latents + 1) * gaussians)
+        self.prediction_heads = nn.Linear(latents + hiddens, 2)
         
         self.rnn = nn.LSTMCell(latents + actions, hiddens)
 
         stride = self.gaussians * self.latents
-        self.splits = [stride, stride, gaussians, 1, 1]
+        self.splits = [stride, stride, gaussians]
 
-    def forward(self, input, hidden): # pylint: disable=arguments-differ
+    def forward(self, batch, action, hidden): # pylint: disable=arguments-differ
         """ ONE STEP forward.
 
         :args actions: (BSIZE, ASIZE) torch tensor
@@ -45,12 +46,13 @@ class MDRNNCell_(nn.Module):
         """
         #in_al = in_al.view(*in_al.shape[1:])
 
-        next_hidden = self.rnn(input, hidden)
-        out_rnn = next_hidden[0]
+        preds = self.prediction_heads(torch.cat([batch, hidden[0]], dim=-1))
+        reward, done = preds[:,0], preds[:,1]
+        next_hidden = self.rnn(torch.cat([batch, action], dim=-1), hidden)
 
-        out_full = self.gmm_linear(out_rnn)
+        out_full = self.gmm_linear(hidden[0])
 
-        mus, sigmas, pi, r, d = torch.split(out_full, self.splits, dim=1)
+        mus, sigmas, pi = torch.split(out_full, self.splits, dim=1)
 
         mus = mus.view(-1, self.gaussians, self.latents)
         sigmas = sigmas.view(-1, self.gaussians, self.latents)
@@ -59,8 +61,25 @@ class MDRNNCell_(nn.Module):
         sigmas = torch.exp(sigmas)
         logpi = F.log_softmax(pi, dim=-1)
 
-        return mus, sigmas, logpi, r, d, next_hidden
+        return mus, sigmas, logpi, reward, done, next_hidden
 
+    def get_loss(self, latent, actions, rewards, dones, hidden):
+        mus, sigmas, logpi, rs, ds, next_hidden = self.forward(latent, actions, hidden)
+
+        gmm_loss = gaussian_mixture_loss(latent, mus, sigmas, logpi)
+        termination_loss = bce_with_logits_list(ds, dones)
+        reward_loss = mse_loss_list(rs, rewards)
+        
+        loss = gmm_loss + termination_loss + reward_loss
+
+        return gmm_loss, termination_loss, reward_loss, next_hidden
+
+    def sample(self, mus, sigmas, logpi):
+        cat = Categorical(logpi)
+        coll = Independent(Gaussian(mus, sigmas), 1)
+
+        mixture = MixtureSameFamily(cat, coll)
+        return mixture.sample()
 
 class MDNRNN(L.LightningModule):
     # ============================================

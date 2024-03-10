@@ -7,51 +7,140 @@ from Models.VAE import VAE
 from Models.MDNRNN import MDNRNN
 from skrl.models.torch import Model, DeterministicMixin
 
+from Utils.utils import prefix_keys, transpose_2d
 
-class WorldModel(Model):
-    def __init__(self,
-                 observation_space: Union[int, Tuple[int], gym.Space, gymnasium.Space],
-                 action_space: Union[int, Tuple[int], gym.Space, gymnasium.Space],
-                 latent_space: Union[int, Tuple[int], gym.Space, gymnasium.Space] = None,
-                 gaussian_space: Union[int, Tuple[int], gym.Space, gymnasium.Space] = None,
-                 img_channels: int = None,
-                 h_space: Union[int, Tuple[int], gym.Space, gymnasium.Space] = None,
-                 lookahead: int = 1,
-                 temperature: float = 0.2,
-                 device: Union[str, torch.device] = 'cuda',
-                 vae: Model = None,
-                 mdnrnn: Model = None):
-        super().__init__(observation_space = observation_space, action_space = action_space)
-        self.latent_space = latent_space
-        self.h_space = h_space
+"""
+Variational encoder model, used as a visual model
+for our model of the world.
+"""
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.optim import Adam, lr_scheduler
+import lightning as L
+import wandb
 
-        self.lookahead = lookahead
-        if vae is None:
-            self.vae = VAE(img_channels, latent_space, observation_space.shape)
-        else:
-            self.vae = vae
+class WorldModel(L.LightningModule):
+    """ Variational Autoencoder """
+    def __init__(self, observation_space, action_space, img_channels, latent_size, hidden_space, gaussian_space, sequence_length):
+        super().__init__()
+        self.save_hyperparameters()
 
-        if mdnrnn is None:
-            self.mdnrnn = MDNRNN(latent_space, action_space, h_space, gaussian_space, lookahead, temperature, device)
-        else:
-            self.mdnrnn = mdnrnn
+        self.observation_space = observation_space
+        self.action_space = action_space.shape[-1]
+        self.img_channels = img_channels
+        self.latent_size = latent_size
+        self.gaussian_space = gaussian_space
+        self.hidden_space = hidden_space
+        self.sequence_length = sequence_length
 
-        self.vae.to(device)
-        self.mdnrnn.to(device)
+        self.vae = VAE(img_channels, latent_size, hidden_space)
+        self.mdnrnn = MDNRNN(latent_size, self.action_space, hidden_space, gaussian_space, include_reward_loss=True)
 
-    def act(self, inputs, role):
-        recon_x, mu, logsigma, z = self.vae(inputs['states'])
-        inputs['latent'] = z
-        mus, sigmas, logpis, rs, ds, (hidden_state, _) = self.mdnrnn(inputs)
-        return z,  hidden_state
-
-    def initial_state(self):
-        return self.mdnrnn.initial_state()
+    def configure_optimizers(self):
+        optimizer = Adam(self.parameters())
+        # Using a scheduler is optional but can be helpful.
+        # The scheduler reduces the LR if the validation performance hasn't improved for the last N epochs
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "train_loss"}
     
-    def to_latent(self, x):
-        _, _, z = self.vae.encoder(x)
-        return z
+    def prepare_loss_dict(self, *losses):
+        names = ['recon_loss', 'reg_loss', 'gmm_loss', 'termination_loss', 'reward_loss']
+        log = {k: v for k, v in zip(names, losses)}
+        
+        loss = sum(losses)
+        log['loss'] = loss
+        return log
+
+    # ============================================
+    # ============== PASS FUNCTIONS ==============
+    # ============================================
+    def _get_losses(
+        self, images: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, 
+        dones: torch.Tensor, hidden: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        hidden = self.mdnrnn.initial_state(batch_size=images.shape[1]) if hidden is None else hidden
+        
+        losses = []
+        outputs = []
+        for image, action, reward, done in zip(images, actions, rewards, dones):
+            image = image.squeeze(0).unsqueeze(1)
+            action = action.squeeze(0)
+            
+            recon_loss, reg_loss, z_mu = self.vae.get_loss(image, hidden[0])
+            gmm_loss, termination_loss, reward_loss, next_hidden = self.mdnrnn.cell.get_loss(z_mu, action, reward, done, hidden)
+            
+            loss_dict = self.prepare_loss_dict(recon_loss, reg_loss, gmm_loss, termination_loss, reward_loss)
+            losses.append(loss_dict)
+            outputs.append([z_mu, hidden])
+            hidden = next_hidden
+
+        loss_dict = {k: sum([d[k] for d in losses]) for k in losses[0].keys()}
+
+        outputs = transpose_2d(outputs)
+        latents = torch.stack(outputs[0]).squeeze()
+        hiddens = outputs[1]
+
+        return loss_dict, latents, hiddens
+
+
+    def forward(
+        self, images: torch.Tensor, actions: torch.Tensor, hidden: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        latents, hiddens, reconstruction_obs, post_reconstruction_obs, est_reward = self.forward_full(images, actions, hidden)
+        return latents, hiddens
+        
+        
+    def forward_full(
+        self, images: torch.Tensor, actions: torch.Tensor, hidden: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        hidden = self.mdnrnn.initial_state(batch_size=images.shape[1]) if hidden is None else hidden
+        
+        outputs = []
+        for image, action in zip(images, actions):
+            image = image.squeeze(0).unsqueeze(1)
+            action = action.squeeze(0)
+            
+            reconstruction, mu, logsigma, z = self.vae(image, hidden[0])
+            mus, sigmas, logpi, reward, done, next_hidden = self.mdnrnn.cell(mu, action, hidden)
+            posterior_z = self.mdnrnn.cell.sample(mus, sigmas, logpi)
+
+            outputs.append([mu, hidden, reconstruction, posterior_z, reward])
+            hidden = next_hidden
+
+        outputs = transpose_2d(outputs)
+        latents = torch.stack(outputs[0])
+        hiddens = outputs[1]
+        reconstruction_obs = torch.stack(outputs[2])
+        posterior_z = torch.stack(outputs[3])
+        est_rewards = torch.stack(outputs[4])
+
+        return latents, hiddens, reconstruction_obs, posterior_z, est_rewards
+
+
+
+    # ============================================
+    # ============== STEP FUNCTIONS ==============
+    # ============================================
+    def step(self, batch, batch_idx):
+        states, actions, rewards, dones, next_states = batch
+        losses, latents, hiddens = self._get_losses(states, actions, rewards, dones)
+
+        return losses
+        
+    def training_step(self, batch, batch_idx):
+        losses = self.step(batch, batch_idx)
+        self.log_dict(prefix_keys(losses, 'train_'))
+        return losses['loss']
+
+    def validation_step(self, batch, batch_idx):
+        losses = self.step(batch, batch_idx)
+        self.log_dict(prefix_keys(losses, 'val_'))
+        return losses['loss']
+        
+    def test_step(self, batch, batch_idx):
+        losses = self.step(batch, batch_idx)
+        self.log_dict(prefix_keys(losses, 'test_'))
+        return losses['loss']
     
-    def step(self, action, latent, hidden_state):
-        _, _, _, _, _, hidden = self.mdnrnn.cell(action, latent, hidden_state)
-        return hidden

@@ -39,6 +39,7 @@ class EnsureType(object):
     def __call__(self, sample):
         return sample.to(self.type)
 
+
 class TransformWrapper(gym.ObservationWrapper):
     transform = transforms.Compose([
             transforms.ToTensor(), 
@@ -46,8 +47,10 @@ class TransformWrapper(gym.ObservationWrapper):
             Crop(bottom=-50),
             transforms.Resize((64, 64), antialias=True),
         ])
+    
     def __init__(self, env):
         super().__init__(env)
+        self.observation_space = gym.spaces.Box(low = np.zeros((64, 64)), high = np.ones((64, 64)), dtype=np.float32)
         
         
     def observation(self, obs):

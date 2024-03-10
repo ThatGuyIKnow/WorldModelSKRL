@@ -37,7 +37,7 @@ class Decoder(nn.Module):
 
 class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
     """ VAE encoder """
-    def __init__(self, img_channels, latent_size):
+    def __init__(self, img_channels, latent_size, hidden_size):
         super(Encoder, self).__init__()
         self.latent_size = latent_size
         #self.img_size = img_size
@@ -48,21 +48,21 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         self.conv3 = nn.Conv2d(64, 128, 4, stride=2)
         self.conv4 = nn.Conv2d(128, 256, 4, stride=2)
 
-        self.fc_mu = nn.Linear(2*2*256, latent_size)
-        self.fc_logsigma = nn.Linear(2*2*256, latent_size)
+        self.fc_mu = nn.Linear(2*2*256 + hidden_size, latent_size)
+        self.fc_logsigma = nn.Linear(2*2*256 + hidden_size, latent_size)
 
         nn.init.zeros_(self.fc_logsigma.weight)
     
 
-    def forward(self, x): # pylint: disable=arguments-differ
-        if len(x.shape) == 3:
-            x = x.view(1, *x.shape)
+    def forward(self, image, hidden): # pylint: disable=arguments-differ
+        x = image
         x = F.leaky_relu(self.conv1(x))
         x = F.leaky_relu(self.conv2(x))
         x = F.leaky_relu(self.conv3(x))
         x = F.leaky_relu(self.conv4(x))
         x = x.view(x.size(0), -1)
 
+        x = torch.cat([x, hidden], dim=-1)
         mu = self.fc_mu(x)
         logsigma = self.fc_logsigma(x)
 
@@ -78,12 +78,12 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
 class VAE(L.LightningModule):
     """ Variational Autoencoder """
-    def __init__(self, img_channels, latent_size, reg_clip = 8.):
+    def __init__(self, img_channels, latent_size, hidden_size, reg_clip = 8.):
         super(VAE, self).__init__()
         self.save_hyperparameters()
 
         self.img_channels = img_channels
-        self.encoder = Encoder(img_channels, latent_size)
+        self.encoder = Encoder(img_channels, latent_size, hidden_size)
         self.decoder = Decoder(img_channels, latent_size)
 
         self.has_nan_loss = False
@@ -101,9 +101,9 @@ class VAE(L.LightningModule):
     # ============================================
     # ================= FORWARD ==================
     # ============================================
-    def forward(self, x): # pylint: disable=arguments-differ
+    def forward(self, batch, hidden): # pylint: disable=arguments-differ
         #x = x.view(-2, self.img_channels, *self.observation_space)
-        mu, logsigma, z = self.encoder(x)
+        mu, logsigma, z = self.encoder(batch, hidden)
 
         recon_x = self.decoder(z)
         return recon_x, mu, logsigma, z
@@ -120,15 +120,18 @@ class VAE(L.LightningModule):
         sigma = torch.nan_to_num(sigma, 0, neginf=0, posinf=math.exp(self.reg_clip))
         return torch.mean(-0.5 * torch.sum(1 + logsigma - mu.pow(2) - sigma, dim=1),dim=0)
     
+    def get_loss(self, batch, hidden): 
+        recon_x, mu, logsigma, _ = self.forward(batch, hidden)
+        
+        recon_loss = self._get_reconstruction_loss(batch, recon_x)
+        reg_loss = self._get_regularization_loss(logsigma, mu)
+        return recon_loss, reg_loss, mu
 
     # ============================================
     # ============== STEP FUNCTIONS ==============
     # ============================================
-    def training_step(self, batch, batch_idx):
-        recon_x, mu, logsigma, _ = self.forward(batch)
-        
-        recon_loss = self._get_reconstruction_loss(batch, recon_x)
-        reg_loss = self._get_regularization_loss(logsigma, mu)
+    def training_step(self, batch, hidden, batch_idx):
+        recon_loss, reg_loss, _ = self.get_loss(batch, hidden)
         loss = recon_loss + reg_loss
         
         self.log("train_loss", loss)
@@ -140,11 +143,8 @@ class VAE(L.LightningModule):
         return loss
 
 
-    def validation_step(self, batch, batch_idx):
-        recon_x, mu, logsigma, _ = self.forward(batch)
-        
-        recon_loss = self._get_reconstruction_loss(batch, recon_x)
-        reg_loss = self._get_regularization_loss(logsigma, mu)
+    def validation_step(self, batch, hidden, batch_idx):
+        recon_loss, reg_loss, _ = self.get_loss(batch, hidden)
         loss = recon_loss + reg_loss
 
         self.log("val_loss", loss)
@@ -154,11 +154,8 @@ class VAE(L.LightningModule):
         return {'val_loss': loss}
 
 
-    def test_step(self, batch, batch_idx):
-        recon_x, mu, logsigma, _ = self.forward(batch)
-        
-        recon_loss = self._get_reconstruction_loss(batch, recon_x)
-        reg_loss = self._get_regularization_loss(logsigma, mu)
+    def test_step(self, batch, hidden, batch_idx):
+        recon_loss, reg_loss, _ = self.get_loss(batch, hidden)
         loss = recon_loss + reg_loss
 
         self.log("test_loss", loss)

@@ -33,12 +33,11 @@ def gaussian_mixture_loss(batch, mus, sigmas, logpi):
 
 def _gaussian_mixture_loss(batch, mus, sigmas, logpi):
     
-    batch = batch.swapaxes(0, 1)
     mus = mus.swapaxes(0, 1)
     sigmas = sigmas.swapaxes(0, 1)
     logpi = logpi.swapaxes(0, 1)
 
-    batch = batch.unsqueeze(-2)
+    batch = batch.unsqueeze(dim=0)
     # Inititiate the Gaussian Dists
     normal_dist = Gaussian(mus, sigmas)
     # Get the Log(P(x_i,k)~N_{mus, sigma}) => (batch, gaussian, feature)
