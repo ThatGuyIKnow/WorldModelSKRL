@@ -109,6 +109,7 @@ def train_world_model():
         ],
         logger=wandb_logger,
         accelerator="auto",
+        val_check_interval=3
     )
     trainer.logger._log_graph = True
     trainer.logger._default_hp_metric = None
