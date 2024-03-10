@@ -77,6 +77,7 @@ class GenerateCallback(L.Callback):
             state_img = torch.concat([v for v in states.swapaxes(0, 1)], dim=-2)
             imgs = torch.concat([state_img, reconst_obs, reconst_post_obs], dim=-1)
             imgs = imgs.unsqueeze(1).cpu().numpy()
+            imgs = np.repeat(imgs, 3, axis=1)
             trainer.logger.log({"video": wandb.Video(imgs, fps=30)})
 
 
