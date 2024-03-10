@@ -34,7 +34,7 @@ class EpisodeDataset(Dataset):
             
             obs = next_obs
             
-            if any(dones[-1]) or any(truncated):
+            if any(ds) or any(truncated):
                 break
         
         states = torch.tensor(states).to(self.device)
