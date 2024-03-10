@@ -39,7 +39,7 @@ ACTION_SPACE = 3
 LATENT_DIM = 32
 IMG_CHANNELS = 1
 HIDDEN_DIM = 256
-SEQ_LENGTH = 1000
+SEQ_LENGTH = 2
 GAUSSIAN_SPACE = 5
 WANDB_KWARGS = {
     'log_model': "all", 
@@ -77,8 +77,8 @@ class GenerateCallback(L.Callback):
             state_img = torch.concat([v for v in states.swapaxes(0, 1)], dim=-2)
             imgs = torch.concat([state_img, reconst_obs, reconst_post_obs], dim=-1)
             imgs = imgs.unsqueeze(1).cpu().numpy()
-            imgs = np.repeat(imgs, 3, axis=1)
-            trainer.logger.log_video(key="video", videos=[imgs,], step=trainer.current_epoch)
+            imgs = np.clip(np.repeat(imgs, 3, axis=1) * 255, 0, 255).astype(np.uint8)
+            trainer.logger.log_video(key="video", videos=[imgs,], step=trainer.global_step)
 
 
 def train_world_model():
