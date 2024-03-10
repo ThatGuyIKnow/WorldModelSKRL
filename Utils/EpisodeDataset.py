@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 
 class EpisodeDataset(Dataset):
-    def __init__(self, env_fn, num_envs=4, max_steps=1000, episodes_per_epoch=2, skip_first=0, device='cpu'):
+    def __init__(self, env_fn, num_envs=4, max_steps=1000, episodes_per_epoch=2, skip_first=0, repeat_action=1, device='cpu'):
         self.env_fn = env_fn
         self.num_envs = num_envs
         self.device = device
@@ -14,14 +14,20 @@ class EpisodeDataset(Dataset):
         self.envs = gym.vector.AsyncVectorEnv([lambda: env_fn() for _ in range(num_envs)])
         self.device = device
         self.skip_first = skip_first
+        self.repeat_action = repeat_action
+
+        if skip_first > max_steps:
+            raise Exception('EpisodeDataset Error: skip_first < max_steps. Initial Frameskipping should be strictly lower than max_step')
 
     def __getitem__(self, idx):
         states, actions, rewards, next_states, dones = [], [], [], [], []
         
         obs, _ = self.envs.reset()
+        action = self.envs.action_space.sample()
         
         for i in range(self.max_steps):
-            action = self.envs.action_space.sample()
+            if i % self.repeat_action == 0:
+                action = self.envs.action_space.sample()    
             #self.envs.step_async(action)
             next_obs, rs, ds, truncated, infos = self.envs.step(action)
 

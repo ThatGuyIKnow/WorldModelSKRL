@@ -105,7 +105,7 @@ class VAE(L.LightningModule):
         #x = x.view(-2, self.img_channels, *self.observation_space)
         mu, logsigma, z = self.encoder(batch, hidden)
 
-        recon_x = self.decoder(z)
+        recon_x = self.decoder(mu)
         return recon_x, mu, logsigma, z
 
 
@@ -124,7 +124,7 @@ class VAE(L.LightningModule):
         recon_x, mu, logsigma, _ = self.forward(batch, hidden)
         
         recon_loss = self._get_reconstruction_loss(batch, recon_x)
-        reg_loss = self._get_regularization_loss(logsigma, mu)
+        reg_loss = self._get_regularization_loss(logsigma, mu) * 0
         return recon_loss, reg_loss, mu
 
     # ============================================

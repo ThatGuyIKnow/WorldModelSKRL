@@ -1,25 +1,17 @@
 import os
 import numpy as np
-from pathlib import Path
-from PIL import Image
 
 import torch
-import torch.utils.data as data
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 import gymnasium as gym
-import torchvision
-import wandb
 
-from Models.MDNRNN import MDNRNN
-from Models.VAE import VAE
 from Models.WorldModel import WorldModel
 
 from Utils.EpisodeDataset import EpisodeDataset
 from Utils.TransformerWrapper import TransformWrapper
-from Utils.utils import transpose_2d
 
 # Data Paths
 CHECKPOINT_PATH = 'runs'
@@ -27,20 +19,23 @@ CHECKPOINT_PATH = 'runs'
 # Training parameters
 SEED = 42
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-NUM_ENVS = 5
+NUM_ENVS = 8
 BATCH_SIZE = 16
 NUM_WORKERS = 0
 MAX_EPOCHS = 100
 EARLY_STOPPING_PATIENCE = 30
 VAL_SPLIT = 0.1
 EPISODES_PER_EPOCH = 5
+SKIP_FIRST = 50
+VIS_FRAME_SKIP = 4
+REPEAT_ACTION = 4
 
 # Model parameters
 ACTION_SPACE = 3
 LATENT_DIM = 32
 IMG_CHANNELS = 1
 HIDDEN_DIM = 256
-SEQ_LENGTH = 1000
+SEQ_LENGTH = 512
 GAUSSIAN_SPACE = 5
 WANDB_KWARGS = {
     'log_model': "all", 
@@ -76,7 +71,7 @@ class GenerateCallback(L.Callback):
                 reconst_post_obs = torch.concat([v for v in recon_posterior.swapaxes(0, 1)], dim=-2)
                 pl_module.train()
             state_img = torch.concat([v for v in states.swapaxes(0, 1)], dim=-2)
-            imgs = torch.concat([state_img, reconst_obs, reconst_post_obs], dim=-1)
+            imgs = torch.concat([state_img, reconst_obs, reconst_post_obs], dim=-1)[::VIS_FRAME_SKIP]
             imgs = imgs.unsqueeze(1).cpu().numpy()
             imgs = np.clip(np.repeat(imgs, 3, axis=1) * 255, 0, 255).astype(np.uint8)
             trainer.logger.log_video(key="video", videos=[imgs,], step=trainer.global_step)
@@ -84,8 +79,8 @@ class GenerateCallback(L.Callback):
 
 def train_world_model():
     train_loader = EpisodeDataset(lambda: TransformWrapper(gym.make("CarRacing-v2", render_mode='rgb_array')), 
-                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, skip_first=50, 
-                                  episodes_per_epoch=EPISODES_PER_EPOCH, device=DEVICE)
+                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, skip_first=SKIP_FIRST, 
+                                  episodes_per_epoch=EPISODES_PER_EPOCH, repeat_action=REPEAT_ACTION, device=DEVICE)
     
     
     pretrained_filename = os.path.join(CHECKPOINT_PATH, "mdnrnn_best.ckpt")
@@ -119,7 +114,7 @@ def train_world_model():
     trainer.logger._default_hp_metric = None
 
         
-    trainer.fit(model, train_loader)
+    trainer.fit(model, train_loader, val_dataloaders=train_loader)
     val_result = trainer.test(model, dataloaders=train_loader, verbose=False)
     result = {"val": val_result}
     return model, result

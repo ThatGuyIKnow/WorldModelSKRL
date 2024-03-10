@@ -76,7 +76,7 @@ class WorldModel(L.LightningModule):
             outputs.append([z_mu, hidden])
             hidden = next_hidden
 
-        loss_dict = {k: sum([d[k] for d in losses]) for k in losses[0].keys()}
+        loss_dict = {k: sum([d[k] for d in losses])/len(losses) for k in losses[0].keys()}
 
         outputs = transpose_2d(outputs)
         latents = torch.stack(outputs[0]).squeeze()
@@ -131,16 +131,16 @@ class WorldModel(L.LightningModule):
         
     def training_step(self, batch, batch_idx):
         losses = self.step(batch, batch_idx)
-        self.log_dict(prefix_keys(losses, 'train_'))
+        self.log_dict(prefix_keys(losses, 'train_'), on_step=True)
         return losses['loss']
 
     def validation_step(self, batch, batch_idx):
         losses = self.step(batch, batch_idx)
-        self.log_dict(prefix_keys(losses, 'val_'))
+        self.log_dict(prefix_keys(losses, 'val_'), on_step=True)
         return losses['loss']
         
     def test_step(self, batch, batch_idx):
         losses = self.step(batch, batch_idx)
-        self.log_dict(prefix_keys(losses, 'test_'))
+        self.log_dict(prefix_keys(losses, 'test_'), on_step=True)
         return losses['loss']
     

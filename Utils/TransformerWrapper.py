@@ -44,7 +44,7 @@ class TransformWrapper(gym.ObservationWrapper):
     transform = transforms.Compose([
             transforms.ToTensor(), 
             transforms.Grayscale(), 
-            Crop(bottom=-50),
+            Crop(bottom=-15),
             transforms.Resize((64, 64), antialias=True),
         ])
     
