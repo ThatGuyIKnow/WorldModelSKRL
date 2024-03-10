@@ -83,7 +83,7 @@ class GenerateCallback(L.Callback):
 
 def train_world_model():
     train_loader = EpisodeDataset(lambda: TransformWrapper(gym.make("CarRacing-v2", render_mode='rgb_array')), 
-                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, device=DEVICE)
+                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, skip_first=50, device=DEVICE)
     
     
     pretrained_filename = os.path.join(CHECKPOINT_PATH, "mdnrnn_best.ckpt")
