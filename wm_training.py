@@ -28,7 +28,7 @@ VAL_SPLIT = 0.1
 EPISODES_PER_EPOCH = 5
 SKIP_FIRST = 50
 VIS_FRAME_SKIP = 4
-REPEAT_ACTION = 4
+REPEAT_ACTION = 100
 
 # Model parameters
 ACTION_SPACE = 3
@@ -74,7 +74,7 @@ class GenerateCallback(L.Callback):
             imgs = torch.concat([state_img, reconst_obs, reconst_post_obs], dim=-1)[::VIS_FRAME_SKIP]
             imgs = imgs.unsqueeze(1).cpu().numpy()
             imgs = np.clip(np.repeat(imgs, 3, axis=1) * 255, 0, 255).astype(np.uint8)
-            trainer.logger.log_video(key="video", videos=[imgs,], step=trainer.global_step)
+            trainer.logger.log_video(key="video", videos=[imgs,], step=trainer.global_step, fps=24)
 
 
 def train_world_model():
