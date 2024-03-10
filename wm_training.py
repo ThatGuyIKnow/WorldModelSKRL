@@ -33,6 +33,7 @@ NUM_WORKERS = 0
 MAX_EPOCHS = 100
 EARLY_STOPPING_PATIENCE = 30
 VAL_SPLIT = 0.1
+EPISODES_PER_EPOCH = 5
 
 # Model parameters
 ACTION_SPACE = 3
@@ -69,7 +70,7 @@ class GenerateCallback(L.Callback):
             with torch.no_grad():
                 pl_module.eval()
                 latents, hiddens, reconstruction_obs, posterior_z, est_reward = pl_module.forward_full(states, actions)
-                recon_posterior = self.model.vae.decoder(posterior_z.view(-1, LATENT_DIM)).view(SEQ_LENGTH, NUM_ENVS, 64, 64)
+                recon_posterior = self.model.vae.decoder(posterior_z.view(-1, LATENT_DIM)).view(-1, NUM_ENVS, 64, 64)
                 reconst_obs = torch.concat([v for v in reconstruction_obs.swapaxes(0, 1)], dim=-2)
                 reconst_obs = reconst_obs.squeeze(1)
                 reconst_post_obs = torch.concat([v for v in recon_posterior.swapaxes(0, 1)], dim=-2)
@@ -83,7 +84,8 @@ class GenerateCallback(L.Callback):
 
 def train_world_model():
     train_loader = EpisodeDataset(lambda: TransformWrapper(gym.make("CarRacing-v2", render_mode='rgb_array')), 
-                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, skip_first=50, device=DEVICE)
+                                  num_envs=NUM_ENVS, max_steps=SEQ_LENGTH, skip_first=50, 
+                                  episodes_per_epoch=EPISODES_PER_EPOCH, device=DEVICE)
     
     
     pretrained_filename = os.path.join(CHECKPOINT_PATH, "mdnrnn_best.ckpt")
