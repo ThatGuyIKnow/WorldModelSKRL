@@ -104,7 +104,7 @@ def train_world_model():
         devices=1,
         max_epochs=MAX_EPOCHS,
         callbacks=[
-            GenerateCallback(train_loader, model, 1),
+            GenerateCallback(train_loader, model, 5),
             ModelCheckpoint(save_weights_only=True),
             LearningRateMonitor("epoch"),
             EarlyStopping(monitor='train_loss', mode='min', patience=EARLY_STOPPING_PATIENCE)
